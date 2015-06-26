@@ -76,7 +76,7 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
       //wait the "+PBREADY"
       OSTmrStart(&TMR_Server,&err);
       while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
-        mem_ptr = OSQPend(&Q_Server,10,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+        mem_ptr = OSQPend(&Q_Server,20,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
         if(mem_ptr != 0){
           data = *mem_ptr;
           OSMemPut(&MEM_ISR,mem_ptr,&err);
