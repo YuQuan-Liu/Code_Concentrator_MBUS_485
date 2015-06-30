@@ -63,35 +63,34 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
   if(NewState != DISABLE){
     buf_server = OSMemGet(&MEM_Buf,&err);
     buf_server_ = buf_server;
-    for(i = 0;i < 3;i++){
-      GPIO_SetBits(GPIOB,GPIO_Pin_3);  //on_off 
-      OSTimeDlyHMSM(0,0,0,500,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+    GPIO_SetBits(GPIOB,GPIO_Pin_3);  //on_off 
+    OSTimeDlyHMSM(0,0,0,500,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
       
-      Mem_Set(buf_server_,0x00,256); //clear the buf
-      
-      GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
-      Server_Post2Queue(ENABLE);
-      //wait the "+PBREADY"
-      OSTmrStart(&TMR_Server,&err);
-      while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
-        mem_ptr = OSQPend(&Q_Server,20,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-        if(mem_ptr != 0){
-          data = *mem_ptr;
-          OSMemPut(&MEM_ISR,mem_ptr,&err);
-          *buf_server++ = data;
-          if((buf_server-buf_server_) > 10){
-            check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-            if(Str_Str(buf_server_,"+PBREADY\r\n")){
-              Server_Post2Queue(DISABLE);
-              OSMemPut(&MEM_Buf,buf_server_,&err);
-              return SUCCESS;
-            }
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    
+    GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
+    Server_Post2Queue(ENABLE);
+    //wait the "+PBREADY"
+    OSTmrStart(&TMR_Server,&err);
+    while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
+      mem_ptr = OSQPend(&Q_Server,20,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+      if(mem_ptr != 0){
+        data = *mem_ptr;
+        OSMemPut(&MEM_ISR,mem_ptr,&err);
+        *buf_server++ = data;
+        if((buf_server-buf_server_) > 10){
+          check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+          if(Str_Str(buf_server_,"+PBREADY")){
+            Server_Post2Queue(DISABLE);
+            OSMemPut(&MEM_Buf,buf_server_,&err);
+            return SUCCESS;
           }
         }
       }
     }
+    
     OSMemPut(&MEM_Buf,buf_server_,&err);
     return ERROR;
   }else{

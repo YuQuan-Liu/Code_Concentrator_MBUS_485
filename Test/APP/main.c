@@ -84,7 +84,7 @@ OS_Q Q_Config;         //配置任务Queue
 OS_Q Q_Deal;         //处理接收到的服务器发送过来的数据
 
 //OS_TMRs
-OS_TMR TMR_Server;      //20s  receive "+PBREADY"
+OS_TMR TMR_Server;      //25s  receive "+PBREADY"
 OS_TMR TMR_Server_2s;      //2s  receive at 
 OS_TMR TMR_Server_100;      //100ms  receive at 
 OS_TMR TMR_Server_200;      //200ms  receive data 
@@ -476,8 +476,8 @@ void ObjCreate(void){
   }
   //OS_TMR
   OSTmrCreate(&TMR_Server,
-              "20s",
-              200,
+              "25s",
+              250,
               0,
               OS_OPT_TMR_ONE_SHOT,
               (OS_TMR_CALLBACK_PTR)Tmr_ServerCallBack,

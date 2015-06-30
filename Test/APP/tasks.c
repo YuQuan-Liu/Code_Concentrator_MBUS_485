@@ -495,7 +495,7 @@ void Task_Connect(void *p_arg){
       M590E_Cmd(ENABLE);
       while(connect() == ERROR){
         fail_count++;
-        if(fail_count/3 == 0){
+        if(fail_count%3 == 0){
           fail_count = 0;
           M590E_Cmd(DISABLE);
           M590E_Cmd(ENABLE);
