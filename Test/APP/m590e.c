@@ -74,8 +74,11 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
     Server_Post2Queue(ENABLE);
     //wait the "+PBREADY"
     OSTmrStart(&TMR_Server,&err);
+    //GPIO_SetBits(GPIOA,GPIO_Pin_15);
     while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
+      
       mem_ptr = OSQPend(&Q_Server,20,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+      /**/
       if(mem_ptr != 0){
         data = *mem_ptr;
         OSMemPut(&MEM_ISR,mem_ptr,&err);
@@ -85,13 +88,16 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
           if(Str_Str(buf_server_,"+PBREADY")){
             Server_Post2Queue(DISABLE);
             OSMemPut(&MEM_Buf,buf_server_,&err);
+            //GPIO_ResetBits(GPIOA,GPIO_Pin_15);
             return SUCCESS;
           }
         }
       }
+      
     }
     
     OSMemPut(&MEM_Buf,buf_server_,&err);
+    //GPIO_ResetBits(GPIOA,GPIO_Pin_15);
     return ERROR;
   }else{
     

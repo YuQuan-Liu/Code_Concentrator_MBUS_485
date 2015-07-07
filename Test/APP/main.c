@@ -137,7 +137,7 @@ void TaskStart(void *p_arg){
   uint8_t test = 0;////
   uint8_t test_write = 0;////
   uint32_t sectionaddr = 0x1FF000;////
-  
+  uint32_t iwdg_count =0;
   
   BSP_Init();
   
@@ -181,6 +181,7 @@ void TaskStart(void *p_arg){
   while(DEF_TRUE){
     /* Reload IWDG counter */
     IWDG_ReloadCounter();
+    
     
     GPIO_SetBits(GPIOB,GPIO_Pin_9);
     OSTimeDlyHMSM(0,0,1,0,

@@ -469,25 +469,7 @@ void Task_Connect(void *p_arg){
   CPU_TS ts;
   OS_ERR err;
   uint8_t needdisable = 0;
-  /*
-  while(DEF_TRUE){
-    M590E_Cmd(ENABLE);
-    while(connect() == ERROR){
-      fail_count++;
-      if(fail_count/3 == 0){
-        fail_count = 0;
-        M590E_Cmd(DISABLE);
-        M590E_Cmd(ENABLE);
-      }
-    }
-    OSSemPend(&SEM_Restart,
-              0,
-              OS_OPT_PEND_BLOCKING,
-              &ts,
-              &err);
-    M590E_Cmd(DISABLE);
-  }
-  */
+  
   while(DEF_TRUE){
     
     while(connectstate == 0){
@@ -502,7 +484,7 @@ void Task_Connect(void *p_arg){
         }
       }
     }
-    OSTimeDlyHMSM(0,3,0,0,
+    OSTimeDlyHMSM(0,1,0,0,
                  OS_OPT_TIME_HMSM_STRICT,
                  &err);
   }
@@ -547,31 +529,20 @@ void Task_HeartBeat(void *p_arg){
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }else{
-        for(i = 0;i < 3;i++){
-          send_server(beat,17);
-          OSSemPend(&SEM_HeartBeat,
-                    2000,
-                    OS_OPT_PEND_BLOCKING,
-                    &ts,
-                    &err);
-          if(err == OS_ERR_NONE){
-            break;
-          }
-        }
-        if(i == 3){
-          //oh  i need to restart
-          //connectstate = 0;
-          change_connect(0);
-          OSSemPost(&SEM_Restart,
-                    OS_OPT_POST_1,
-                    &err);
-        }else{
-          OSTimeDlyHMSM(0,2,0,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-        }
-        
       
+      send_server(beat,17);
+      OSSemPend(&SEM_HeartBeat,
+                2000,
+                OS_OPT_PEND_BLOCKING,
+                &ts,
+                &err);
+      if(err == OS_ERR_NONE){
+        OSTimeDlyHMSM(0,2,0,0,
+                OS_OPT_TIME_HMSM_STRICT,
+                &err);
+      }else{
+        change_connect(0);
+      }
     }
   }
 }
