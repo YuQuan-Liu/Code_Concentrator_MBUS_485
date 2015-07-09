@@ -5,10 +5,10 @@
 
 
 extern OS_MEM MEM_ISR;
-extern OS_Q Q_Server;
 extern OS_SEM SEM_ServerTX;
 
-extern volatile uint8_t q_server_pending;
+extern uint8_t * server_ptr;      //中断中保存M590E 返回来的数据
+extern uint8_t * server_ptr_;     //记录中断的开始指针
 //m590e
 void USART2_Handler(void){
   OS_ERR err;
@@ -19,17 +19,10 @@ void USART2_Handler(void){
   if(USART_GetFlagStatus(USART2,USART_FLAG_RXNE)){
     rx_byte = USART_ReceiveData(USART2);
     /**/
-    if(q_server_pending != 0){
-      mem_ptr = OSMemGet(&MEM_ISR,&err);
-      *mem_ptr = rx_byte;
-      OSQPost((OS_Q *)&Q_Server,
-              (void *)mem_ptr,
-              1,
-              OS_OPT_POST_FIFO,
-              &err);
-      
-      if(err != OS_ERR_NONE){
-        asm("NOP");
+    if(server_ptr_ != 0){
+      if(server_ptr - server_ptr_ < 255){
+        *server_ptr = rx_byte;
+        server_ptr++;
       }
     }
     
@@ -231,24 +224,20 @@ ErrorStatus Server_WriteStr(uint8_t * data){
   return SUCCESS;
 }
 
-extern volatile uint8_t q_server_pending;
-ErrorStatus Server_Post2Queue(FunctionalState NewState){
+/**
+ptr == 0  中断中不放到buf中
+ptr != 0  中断中放到ptr开始的buf中
+*/
+ErrorStatus Server_Post2Buf(uint8_t * ptr){
   CPU_SR_ALLOC();
   CPU_CRITICAL_ENTER();
   
-  if(NewState != DISABLE){
-    //CPU_CRITICAL_ENTER();
-    q_server_pending = 1;
-    //CPU_CRITICAL_EXIT();
-  }else{
-    //CPU_CRITICAL_ENTER();
-    q_server_pending = 0;
-    //CPU_CRITICAL_EXIT();
-  }
+  server_ptr = ptr;
+  server_ptr_ = ptr;
+    
   CPU_CRITICAL_EXIT();
   return SUCCESS;
 }
-
 
 extern volatile uint8_t reading;
 ErrorStatus Device_Read(FunctionalState NewState){

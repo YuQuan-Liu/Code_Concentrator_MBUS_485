@@ -15,7 +15,6 @@
 extern OS_MEM MEM_Buf;
 extern OS_MEM MEM_ISR;
 
-extern OS_Q Q_Server;        //服务器发送过来的数据
 extern OS_Q Q_Slave;            //采集器、表发送过来的数据
 extern OS_Q Q_Read;             //抄表任务Queue
 extern OS_Q Q_ReadData;        //发送抄表指令后  下层返回抄表数据
@@ -243,7 +242,9 @@ uint8_t check_cs(uint8_t * start,uint16_t len){
 
 
 
-volatile uint8_t q_server_pending = 0;  //只有需要接收服务器数据时才往队列Q_Server中post
+uint8_t * server_ptr = 0;      //中断中保存M590E 返回来的数据
+uint8_t * server_ptr_ = 0;     //记录中断的开始指针
+
 void Task_Server(void *p_arg){
   OS_ERR err;
   CPU_TS ts;
@@ -262,11 +263,6 @@ void Task_Server(void *p_arg){
               &ts,
               &err);
     while(connectstate == 1){
-      if(q_server_pending == 0){
-        buf_server_task = 0;
-        buf_server_task_ = 0;
-        Server_Post2Queue(ENABLE);
-      }
       
       if(buf_server_task == 0){
         buf_server_task = OSMemGet(&MEM_Buf,
@@ -277,83 +273,106 @@ void Task_Server(void *p_arg){
           asm("NOP");
           //didn't get the buf
         }
-      }
-      mem_ptr = OSQPend(&Q_Server,0,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-      data = *mem_ptr;
-      OSMemPut(&MEM_ISR,mem_ptr,&err);
-      
-      
-      OSTmrStart(&TMR_Server_200,&err);
-      while(OSTmrStateGet(&TMR_Server_200,&err) == OS_TMR_STATE_RUNNING){
-        mem_ptr = OSQPend(&Q_Server,10,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-        if(mem_ptr != 0){
-          data = *mem_ptr;
-          OSMemPut(&MEM_ISR,mem_ptr,&err);
-          *buf_server_task++ = data;
-          if((buf_server_task-buf_server_task_) == 250){
-            //the buf is full
-            break;
-          }
-        }
-      }
-      check_str(buf_server_task_,buf_server_task);  //屏蔽掉数据前的0x00
-      if(Str_Str(buf_server_task_,"\n>")){
-        OSSemPost(&SEM_Send,
-                  OS_OPT_POST_1,
-                  &err);
-        buf_server_task = buf_server_task_;
-        Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        continue;
-      }
-      
-      if(Str_Str(buf_server_task_,"+IPSTATUS:0,CONNECT,TCP,")){
-        OSSemPost(&SEM_Send_Online,
-                  OS_OPT_POST_1,
-                  &err);
-        buf_server_task = buf_server_task_;
-        Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        continue;
-      }
-      
-      if(Str_Str(buf_server_task_,"+IPSTATUS:0,DISCONNECT")){
-        Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        OSMemPut(&MEM_Buf,buf_server_task_,&err);
         
-        buf_server_task = 0;
-        buf_server_task_ = 0;
-        //connectstate = 0;
-        change_connect(0);
-        Server_Post2Queue(DISABLE);
-        //OSSemPost(&SEM_Restart,
-        //          OS_OPT_POST_1,
-        //          &err);
-        break;
+        //server_ptr = buf_server_task_;
+        //server_ptr_ = buf_server_task_;
+        Server_Post2Buf(buf_server_task_);
       }
       
-      if(Str_Str(buf_server_task_,"+TCPSEND:0,") && !Str_Str(buf_server_task_,"+TCPSEND:0,-1")){
-        OSSemPost(&SEM_SendOver,
-                  OS_OPT_POST_1,
+      if(server_ptr - server_ptr_ > 0){
+        OSTimeDlyHMSM(0,0,0,50,
+                  OS_OPT_TIME_HMSM_STRICT,
                   &err);
+        
+        buf_server_task = server_ptr;
+        check_str(buf_server_task_,buf_server_task);  //屏蔽掉数据前的0x00
+        if(Str_Str(buf_server_task_,"\n>")){
+          OSSemPost(&SEM_Send,
+                    OS_OPT_POST_1,
+                    &err);
+          buf_server_task = buf_server_task_;
+          
+          //server_ptr = buf_server_task_;
+          //server_ptr_ = buf_server_task_;
+          Server_Post2Buf(buf_server_task_);
+          
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          continue;
+        }
+        
+        if(Str_Str(buf_server_task_,"+IPSTATUS:0,CONNECT,TCP,")){
+          OSSemPost(&SEM_Send_Online,
+                    OS_OPT_POST_1,
+                    &err);
+          buf_server_task = buf_server_task_;
+          
+          //server_ptr = buf_server_task_;
+          //server_ptr_ = buf_server_task_;
+          Server_Post2Buf(buf_server_task_);
+          
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          continue;
+        }
+        
+        if(Str_Str(buf_server_task_,"+IPSTATUS:0,DISCONNECT")){
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          OSMemPut(&MEM_Buf,buf_server_task_,&err);
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          //server_ptr = 0;
+          //server_ptr_ = 0;
+          Server_Post2Buf(0);
+          //connectstate = 0;
+          change_connect(0);
+          break;
+        }
+        
+        if(Str_Str(buf_server_task_,"+TCPSEND:0,") && !Str_Str(buf_server_task_,"+TCPSEND:0,-1")){
+          OSSemPost(&SEM_SendOver,
+                    OS_OPT_POST_1,
+                    &err);
+          buf_server_task = buf_server_task_;
+          
+          //server_ptr = buf_server_task_;
+          //server_ptr_ = buf_server_task_;
+          Server_Post2Buf(buf_server_task_);
+          
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          continue;
+        }
+        
+        if(Str_Str(buf_server_task_,"+TCPRECV:0")){
+          //oh it's the data 
+          OSQPost(&Q_Deal,
+                  buf_server_task_,
+                  buf_server_task-buf_server_task_,
+                  OS_OPT_POST_FIFO,
+                  &err);
+          buf_server_task = 0;
+          
+          //server_ptr = 0;
+          //server_ptr_ = 0;
+          Server_Post2Buf(0);
+          
+          continue;
+        }
+        
+        //don't know what's that
         buf_server_task = buf_server_task_;
+        
+        //server_ptr = buf_server_task_;
+        //server_ptr_ = buf_server_task_;
+        Server_Post2Buf(buf_server_task_);
+        
         Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        continue;
+        
+        
+      }else{
+        OSTimeDlyHMSM(0,0,0,50,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
       }
-      
-      if(Str_Str(buf_server_task_,"+TCPRECV:0")){
-        //oh it's the data 
-        OSQPost(&Q_Deal,
-                buf_server_task_,
-                buf_server_task-buf_server_task_,
-                OS_OPT_POST_FIFO,
-                &err);
-        buf_server_task = 0;
-        continue;
-      }
-      
-      //don't know what's that
-      buf_server_task = buf_server_task_;
-      Mem_Set(buf_server_task_,0x00,256); //clear the buf
-      
     }
   }
   

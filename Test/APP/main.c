@@ -76,7 +76,6 @@ OS_SEM SEM_Connected;   //m590e online
 OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
 
 //OS_Qs
-OS_Q Q_Server;        //服务器发送过来的数据
 OS_Q Q_Slave;            //采集器、表发送过来的数据
 OS_Q Q_Read;             //抄表任务Queue
 OS_Q Q_ReadData;        //发送抄表指令后  下层返回抄表数据
@@ -426,15 +425,6 @@ void ObjCreate(void){
   }
   
   //OS_Q
-  //data from server
-  OSQCreate(&Q_Server,
-            "server",
-            4,
-            &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
   //data from slave
   OSQCreate(&Q_Slave,
             "slave",

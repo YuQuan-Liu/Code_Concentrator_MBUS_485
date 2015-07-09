@@ -17,15 +17,14 @@ extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数
 extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
 extern OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
 
-extern OS_Q Q_Server;        //服务器发送过来的数据
-
 extern OS_TMR TMR_Server;       //20s
 extern OS_TMR TMR_Server_2s;      //2s
 extern OS_TMR TMR_Server_100;      //100ms
 
 
-extern volatile uint8_t q_server_pending;
 extern volatile uint8_t connectstate;
+extern uint8_t * server_ptr;      //中断中保存M590E 返回来的数据
+extern uint8_t * server_ptr_;     //记录中断的开始指针
 
 //get the   APN,APN'username,APN'password,DNS
 uint8_t apn[10] = "CMNET\r";                    //其中APN的最后必须是\r\0
@@ -71,40 +70,35 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
     Mem_Set(buf_server_,0x00,256); //clear the buf
     
     GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
-    Server_Post2Queue(ENABLE);
+    
+    //server_ptr = buf_server_;
+    //server_ptr_ = buf_server_;
+    Server_Post2Buf(buf_server_);
+    
     //wait the "+PBREADY"
     OSTmrStart(&TMR_Server,&err);
-    //GPIO_SetBits(GPIOA,GPIO_Pin_15);
     while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
-      
-      mem_ptr = OSQPend(&Q_Server,20,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-      /**/
-      if(mem_ptr != 0){
-        data = *mem_ptr;
-        OSMemPut(&MEM_ISR,mem_ptr,&err);
-        *buf_server++ = data;
-        if((buf_server-buf_server_) > 10){
-          check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-          if(Str_Str(buf_server_,"+PBREADY")){
-            Server_Post2Queue(DISABLE);
-            OSMemPut(&MEM_Buf,buf_server_,&err);
-            //GPIO_ResetBits(GPIOA,GPIO_Pin_15);
-            return SUCCESS;
-          }
+      OSTimeDlyHMSM(0,0,0,20,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+      if(server_ptr - server_ptr_ > 10){
+        check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+        if(Str_Str(buf_server_,"+PBREADY")){
+          OSMemPut(&MEM_Buf,buf_server_,&err);
+          //server_ptr = 0;
+          //server_ptr_ = 0;
+          Server_Post2Buf(0);
+          return SUCCESS;
         }
       }
-      
     }
     
     OSMemPut(&MEM_Buf,buf_server_,&err);
-    //GPIO_ResetBits(GPIOA,GPIO_Pin_15);
+    //server_ptr = 0;
+    //server_ptr_ = 0;
+    Server_Post2Buf(0);
     return ERROR;
   }else{
-    
-    /*M590E_SoftOFF();
-    OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);*/
     //disable the power
     GPIO_ResetBits(GPIOA,GPIO_Pin_1);
     OSTimeDlyHMSM(0,0,3,0,
@@ -121,17 +115,20 @@ uint8_t * M590E_ReadAT_100(uint8_t * buf_server){
   CPU_TS ts;
   uint16_t msg_size;
   
-  Server_Post2Queue(ENABLE);
+  //server_ptr = buf_server;
+  //server_ptr_ = buf_server;
+  Server_Post2Buf(buf_server);
+  
   OSTmrStart(&TMR_Server_100,&err);
   while(OSTmrStateGet(&TMR_Server_100,&err) == OS_TMR_STATE_RUNNING){
-    mem_ptr = OSQPend(&Q_Server,10,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-    if(mem_ptr != 0){
-      data = *mem_ptr;
-      OSMemPut(&MEM_ISR,mem_ptr,&err);
-      *buf_server++ = data;
-    }
+    OSTimeDlyHMSM(0,0,0,20,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
   }
-  Server_Post2Queue(DISABLE);
+  buf_server = server_ptr;
+  //server_ptr = 0;
+  //server_ptr_ = 0;
+  Server_Post2Buf(0);
   return buf_server;
 }
 
@@ -142,17 +139,20 @@ uint8_t * M590E_ReadAT_2s(uint8_t * buf_server){
   CPU_TS ts;
   uint16_t msg_size;
   
-  Server_Post2Queue(ENABLE);
+  //server_ptr = buf_server;
+  //server_ptr_ = buf_server;
+  Server_Post2Buf(buf_server);
+  
   OSTmrStart(&TMR_Server_2s,&err);
   while(OSTmrStateGet(&TMR_Server_2s,&err) == OS_TMR_STATE_RUNNING){
-    mem_ptr = OSQPend(&Q_Server,10,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-    if(mem_ptr != 0){
-      data = *mem_ptr;
-      OSMemPut(&MEM_ISR,mem_ptr,&err);
-      *buf_server++ = data;
-    }
+    OSTimeDlyHMSM(0,0,0,500,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
   }
-  Server_Post2Queue(DISABLE);
+  buf_server = server_ptr;
+  //server_ptr = 0;
+  //server_ptr_ = 0;
+  Server_Post2Buf(0);
   return buf_server;
 }
 
