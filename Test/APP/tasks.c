@@ -242,8 +242,8 @@ uint8_t check_cs(uint8_t * start,uint16_t len){
 
 
 
-uint8_t * server_ptr = 0;      //中断中保存M590E 返回来的数据
-uint8_t * server_ptr_ = 0;     //记录中断的开始指针
+uint8_t * volatile server_ptr = 0;      //中断中保存M590E 返回来的数据
+uint8_t * volatile server_ptr_ = 0;     //记录中断的开始指针
 
 void Task_Server(void *p_arg){
   OS_ERR err;

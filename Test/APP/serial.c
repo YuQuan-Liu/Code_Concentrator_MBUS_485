@@ -7,8 +7,8 @@
 extern OS_MEM MEM_ISR;
 extern OS_SEM SEM_ServerTX;
 
-extern uint8_t * server_ptr;      //中断中保存M590E 返回来的数据
-extern uint8_t * server_ptr_;     //记录中断的开始指针
+extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
+extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 //m590e
 void USART2_Handler(void){
   OS_ERR err;

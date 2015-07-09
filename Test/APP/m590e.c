@@ -23,8 +23,8 @@ extern OS_TMR TMR_Server_100;      //100ms
 
 
 extern volatile uint8_t connectstate;
-extern uint8_t * server_ptr;      //中断中保存M590E 返回来的数据
-extern uint8_t * server_ptr_;     //记录中断的开始指针
+extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
+extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 
 //get the   APN,APN'username,APN'password,DNS
 uint8_t apn[10] = "CMNET\r";                    //其中APN的最后必须是\r\0
