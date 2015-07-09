@@ -601,9 +601,9 @@ ErrorStatus connect(void){
   //connectstate = 1;
   
   change_connect(1);
-  OSSemPost(&SEM_Connected,
-             OS_OPT_POST_1,
-             &err);
+  //OSSemPost(&SEM_Connected,
+  //          OS_OPT_POST_1,
+  //           &err);
   
   //tcpsend(10,"0123456789");
   return SUCCESS;

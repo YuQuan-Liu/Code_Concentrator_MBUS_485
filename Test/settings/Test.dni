@@ -9,7 +9,7 @@ TriggerName=main
 LimitSize=0
 ByteLimit=50
 [DebugChecksum]
-Checksum=667211998
+Checksum=-374187306
 [Exceptions]
 StopOnUncaught=_ 0
 StopOnThrow=_ 0
@@ -53,9 +53,6 @@ Fmt3=uint8_t[4]	4	0
 Fmt4=uint8_t[5]	4	0
 Fmt5=uint8_t[6]	4	0
 Fmt6=uint8_t[7]	4	0
-[Trace2]
-Enabled=0
-ShowSource=0
 [SWOTraceWindow]
 PcSampling=0
 InterruptLogs=0
@@ -78,13 +75,6 @@ GraphEnabled=0
 ShowTimeLog=1
 ShowTimeSum=1
 SumSortOrder=0
-[Disassemble mode]
-mode=0
-[Breakpoints2]
-Bp0=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.626.5" 0 0 1 "" 0 "" 0
-Bp1=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.644.5" 0 0 1 "" 0 "" 0
-Bp2=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.657.5" 0 0 1 "" 0 "" 0
-Count=3
 [Log file]
 LoggingEnabled=_ 0
 LogFile=_ ""
@@ -92,9 +82,6 @@ Category=_ 0
 [TermIOLog]
 LoggingEnabled=_ 0
 LogFile=_ ""
-[Aliases]
-Count=0
-SuppressDialog=0
 [CallStackLog]
 Enabled=0
 [DriverProfiling]
@@ -103,3 +90,13 @@ Mode=3
 Graph=0
 Symbiont=0
 Exclusions=
+[Disassemble mode]
+mode=0
+[Breakpoints2]
+Bp0=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.626.5" 0 0 1 "" 0 "" 0
+Bp1=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.644.5" 0 0 1 "" 0 "" 0
+Bp2=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\m590e.c}.657.5" 0 0 1 "" 0 "" 0
+Count=3
+[Aliases]
+Count=0
+SuppressDialog=0

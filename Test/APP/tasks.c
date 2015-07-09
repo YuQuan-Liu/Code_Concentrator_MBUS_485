@@ -257,11 +257,16 @@ void Task_Server(void *p_arg){
   
   while(DEF_TRUE){
     
-    OSSemPend(&SEM_Connected,
-              0,
-              OS_OPT_PEND_BLOCKING,
-              &ts,
-              &err);
+    //OSSemPend(&SEM_Connected,
+    //          0,
+    //          OS_OPT_PEND_BLOCKING,
+    //          &ts,
+    //          &err);
+    
+    OSTimeDlyHMSM(0,0,6,0,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    
     while(connectstate == 1){
       
       if(buf_server_task == 0){
