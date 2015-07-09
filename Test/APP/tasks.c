@@ -39,8 +39,8 @@ extern uint8_t deviceaddr[5];
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
 
 
-uint8_t * buf = 0;   //the buf used put the data in 
-uint8_t * buf_;       //keep the buf's ptr  used to release the buf
+uint8_t * volatile buf = 0;   //the buf used put the data in 
+uint8_t * volatile buf_;       //keep the buf's ptr  used to release the buf
 uint8_t start_slave = 0;
 void Task_Slave(void *p_arg){
   OS_ERR err;
@@ -256,19 +256,7 @@ void Task_Server(void *p_arg){
   uint8_t * buf_server_task_ = 0;
   
   while(DEF_TRUE){
-    
-    //OSSemPend(&SEM_Connected,
-    //          0,
-    //          OS_OPT_PEND_BLOCKING,
-    //          &ts,
-    //          &err);
-    
-    OSTimeDlyHMSM(0,0,6,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-    
-    while(connectstate == 1){
-      
+    if(connectstate == 1){
       if(buf_server_task == 0){
         buf_server_task = OSMemGet(&MEM_Buf,
                        &err);
@@ -278,9 +266,6 @@ void Task_Server(void *p_arg){
           asm("NOP");
           //didn't get the buf
         }
-        
-        //server_ptr = buf_server_task_;
-        //server_ptr_ = buf_server_task_;
         Server_Post2Buf(buf_server_task_);
       }
       
@@ -292,30 +277,26 @@ void Task_Server(void *p_arg){
         buf_server_task = server_ptr;
         check_str(buf_server_task_,buf_server_task);  //屏蔽掉数据前的0x00
         if(Str_Str(buf_server_task_,"\n>")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          Server_Post2Buf(buf_server_task_);
+          
           OSSemPost(&SEM_Send,
                     OS_OPT_POST_1,
                     &err);
-          buf_server_task = buf_server_task_;
-          
-          //server_ptr = buf_server_task_;
-          //server_ptr_ = buf_server_task_;
-          Server_Post2Buf(buf_server_task_);
-          
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
           continue;
         }
         
         if(Str_Str(buf_server_task_,"+IPSTATUS:0,CONNECT,TCP,")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          Server_Post2Buf(buf_server_task_);
+          
           OSSemPost(&SEM_Send_Online,
                     OS_OPT_POST_1,
                     &err);
-          buf_server_task = buf_server_task_;
-          
-          //server_ptr = buf_server_task_;
-          //server_ptr_ = buf_server_task_;
-          Server_Post2Buf(buf_server_task_);
-          
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
           continue;
         }
         
@@ -325,25 +306,20 @@ void Task_Server(void *p_arg){
           
           buf_server_task = 0;
           buf_server_task_ = 0;
-          //server_ptr = 0;
-          //server_ptr_ = 0;
           Server_Post2Buf(0);
-          //connectstate = 0;
           change_connect(0);
-          break;
+          continue;
         }
         
         if(Str_Str(buf_server_task_,"+TCPSEND:0,") && !Str_Str(buf_server_task_,"+TCPSEND:0,-1")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          Server_Post2Buf(buf_server_task_);
+          
           OSSemPost(&SEM_SendOver,
                     OS_OPT_POST_1,
                     &err);
-          buf_server_task = buf_server_task_;
-          
-          //server_ptr = buf_server_task_;
-          //server_ptr_ = buf_server_task_;
-          Server_Post2Buf(buf_server_task_);
-          
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
           continue;
         }
         
@@ -355,28 +331,34 @@ void Task_Server(void *p_arg){
                   OS_OPT_POST_FIFO,
                   &err);
           buf_server_task = 0;
-          
-          //server_ptr = 0;
-          //server_ptr_ = 0;
           Server_Post2Buf(0);
-          
           continue;
         }
         
         //don't know what's that
         buf_server_task = buf_server_task_;
-        
-        //server_ptr = buf_server_task_;
-        //server_ptr_ = buf_server_task_;
-        Server_Post2Buf(buf_server_task_);
-        
         Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        
+        Server_Post2Buf(buf_server_task_);
         
       }else{
         OSTimeDlyHMSM(0,0,0,50,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
+      }
+    }else{
+      //connectstate == 0
+      OSTimeDlyHMSM(0,0,0,100,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+      
+      if(buf_server_task != 0){
+        Mem_Set(buf_server_task_,0x00,256); //clear the buf
+        OSMemPut(&MEM_Buf,buf_server_task_,&err);
+        
+        buf_server_task = 0;
+        buf_server_task_ = 0;
+        
+        Server_Post2Buf(0);
       }
     }
   }
@@ -489,26 +471,17 @@ uint8_t check_frame(uint8_t * start){
 }
 
 void Task_Connect(void *p_arg){
-  uint8_t fail_count = 0;
   CPU_TS ts;
   OS_ERR err;
-  uint8_t needdisable = 0;
   
   while(DEF_TRUE){
     
-    while(connectstate == 0){
+    if(connectstate == 0){
       M590E_Cmd(DISABLE);
       M590E_Cmd(ENABLE);
-      while(connect() == ERROR){
-        fail_count++;
-        if(fail_count%3 == 0){
-          fail_count = 0;
-          M590E_Cmd(DISABLE);
-          M590E_Cmd(ENABLE);
-        }
-      }
+      connect();
     }
-    OSTimeDlyHMSM(0,1,0,0,
+    OSTimeDlyHMSM(0,0,0,100,
                  OS_OPT_TIME_HMSM_STRICT,
                  &err);
   }
@@ -549,23 +522,28 @@ void Task_HeartBeat(void *p_arg){
   
   while(DEF_TRUE){
     if(connectstate == 0){
-      OSTimeDlyHMSM(0,0,10,0,
+      OSTimeDlyHMSM(0,0,0,100,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }else{
-      
-      send_server(beat,17);
-      OSSemPend(&SEM_HeartBeat,
-                2000,
-                OS_OPT_PEND_BLOCKING,
-                &ts,
-                &err);
-      if(err == OS_ERR_NONE){
-        OSTimeDlyHMSM(0,2,0,0,
-                OS_OPT_TIME_HMSM_STRICT,
-                &err);
+      if(server_ptr != 0){
+        send_server(beat,17);
+        OSSemPend(&SEM_HeartBeat,
+                  5000,
+                  OS_OPT_PEND_BLOCKING,
+                  &ts,
+                  &err);
+        if(err == OS_ERR_NONE){
+          OSTimeDlyHMSM(0,2,0,0,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+        }else{
+          change_connect(0);
+        }
       }else{
-        change_connect(0);
+        OSTimeDlyHMSM(0,0,0,100,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
       }
     }
   }

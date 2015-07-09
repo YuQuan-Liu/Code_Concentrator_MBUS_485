@@ -57,8 +57,7 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
   CPU_SR_ALLOC();
   uint8_t * buf_server = 0;
   uint8_t * buf_server_ = 0;
-  //CPU_CRITICAL_ENTER();
-  //CPU_CRITICAL_EXIT();
+  
   if(NewState != DISABLE){
     buf_server = OSMemGet(&MEM_Buf,&err);
     buf_server_ = buf_server;
@@ -70,10 +69,7 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
     Mem_Set(buf_server_,0x00,256); //clear the buf
     
     GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
-    
-    //server_ptr = buf_server_;
-    //server_ptr_ = buf_server_;
-    Server_Post2Buf(buf_server_);
+    Server_Post2Buf(buf_server_);   //post to the buf
     
     //wait the "+PBREADY"
     OSTmrStart(&TMR_Server,&err);
@@ -85,8 +81,7 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
         check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
         if(Str_Str(buf_server_,"+PBREADY")){
           OSMemPut(&MEM_Buf,buf_server_,&err);
-          //server_ptr = 0;
-          //server_ptr_ = 0;
+          
           Server_Post2Buf(0);
           return SUCCESS;
         }
@@ -94,8 +89,7 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
     }
     
     OSMemPut(&MEM_Buf,buf_server_,&err);
-    //server_ptr = 0;
-    //server_ptr_ = 0;
+    
     Server_Post2Buf(0);
     return ERROR;
   }else{
@@ -109,14 +103,9 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
 }
 
 uint8_t * M590E_ReadAT_100(uint8_t * buf_server){
-  uint8_t * mem_ptr;
-  uint8_t data;
   OS_ERR err;
   CPU_TS ts;
-  uint16_t msg_size;
   
-  //server_ptr = buf_server;
-  //server_ptr_ = buf_server;
   Server_Post2Buf(buf_server);
   
   OSTmrStart(&TMR_Server_100,&err);
@@ -126,32 +115,26 @@ uint8_t * M590E_ReadAT_100(uint8_t * buf_server){
                   &err);
   }
   buf_server = server_ptr;
-  //server_ptr = 0;
-  //server_ptr_ = 0;
+  
   Server_Post2Buf(0);
   return buf_server;
 }
 
 uint8_t * M590E_ReadAT_2s(uint8_t * buf_server){
-  uint8_t * mem_ptr;
-  uint8_t data;
   OS_ERR err;
   CPU_TS ts;
   uint16_t msg_size;
   
-  //server_ptr = buf_server;
-  //server_ptr_ = buf_server;
   Server_Post2Buf(buf_server);
   
   OSTmrStart(&TMR_Server_2s,&err);
   while(OSTmrStateGet(&TMR_Server_2s,&err) == OS_TMR_STATE_RUNNING){
-    OSTimeDlyHMSM(0,0,0,500,
+    OSTimeDlyHMSM(0,0,0,20,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }
   buf_server = server_ptr;
-  //server_ptr = 0;
-  //server_ptr_ = 0;
+  
   Server_Post2Buf(0);
   return buf_server;
 }
