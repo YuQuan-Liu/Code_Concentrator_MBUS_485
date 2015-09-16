@@ -6,7 +6,7 @@
 #include "lib_str.h"
 #include "serial.h"
 #include "spi_flash.h"
-#include "m590e.h"
+#include "gprs.h"
 #include "frame.h"
 #include "frame_188.h"
 
@@ -16,15 +16,13 @@ extern OS_MEM MEM_Buf;
 extern OS_MEM MEM_ISR;
 
 extern OS_Q Q_Slave;            //采集器、表发送过来的数据
-extern OS_Q Q_Read;             //抄表任务Queue
+extern OS_Q Q_Read;            //抄表任务Queue
 extern OS_Q Q_ReadData;        //发送抄表指令后  下层返回抄表数据
 extern OS_Q Q_Config;         //配置任务Queue
 extern OS_Q Q_Deal;         //处理接收到的服务器发送过来的数据
 
 extern OS_SEM SEM_HeartBeat;    //接收服务器数据Task to HeartBeat Task  接收到心跳的回应
-extern OS_SEM SEM_Restart;      //HeartBeat Task to Connection Task  重启模块
-extern OS_SEM SEM_Connected;   //m590e online  
-extern OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
+extern OS_SEM SEM_ACKData;     //服务器对数据的ACK
 extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
 extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
 
@@ -37,6 +35,13 @@ extern volatile uint8_t connectstate;
 extern uint8_t deviceaddr[5];
 
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
+
+uint8_t heart_seq = 0;  //记录心跳的序列号 等待ack
+uint8_t data_seq = 0;  //记录数据的序列号 等待ack
+
+uint8_t local_seq = 0;  //本地序列号
+uint8_t server_seq = 0;  //服务器端序列号  抄表时  会同步此序列号
+
 
 
 uint8_t * volatile buf = 0;   //the buf used put the data in 
@@ -270,9 +275,9 @@ void Task_Server(void *p_arg){
       }
       
       if(server_ptr - server_ptr_ > 0){
-        OSTimeDlyHMSM(0,0,0,50,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+        OSTimeDly(4,
+             OS_OPT_TIME_DLY,
+             &err);
         
         buf_server_task = server_ptr;
         check_str(buf_server_task_,buf_server_task);  //屏蔽掉数据前的0x00
@@ -283,41 +288,6 @@ void Task_Server(void *p_arg){
           Server_Post2Buf(buf_server_task_);
           
           OSSemPost(&SEM_Send,
-                    OS_OPT_POST_1,
-                    &err);
-          continue;
-        }
-        
-        if(Str_Str(buf_server_task_,"+IPSTATUS:0,CONNECT,TCP,")){
-          
-          buf_server_task = buf_server_task_;
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          Server_Post2Buf(buf_server_task_);
-          
-          OSSemPost(&SEM_Send_Online,
-                    OS_OPT_POST_1,
-                    &err);
-          continue;
-        }
-        
-        if(Str_Str(buf_server_task_,"+IPSTATUS:0,DISCONNECT")){
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          OSMemPut(&MEM_Buf,buf_server_task_,&err);
-          
-          buf_server_task = 0;
-          buf_server_task_ = 0;
-          Server_Post2Buf(0);
-          change_connect(0);
-          continue;
-        }
-        
-        if(Str_Str(buf_server_task_,"+TCPSEND:0,") && !Str_Str(buf_server_task_,"+TCPSEND:0,-1")){
-          
-          buf_server_task = buf_server_task_;
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          Server_Post2Buf(buf_server_task_);
-          
-          OSSemPost(&SEM_SendOver,
                     OS_OPT_POST_1,
                     &err);
           continue;
@@ -335,21 +305,77 @@ void Task_Server(void *p_arg){
           continue;
         }
         
+        if(Str_Str(buf_server_task_,"+TCPSEND:0,")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          Server_Post2Buf(buf_server_task_);
+          
+          OSSemPost(&SEM_SendOver,
+                    OS_OPT_POST_1,
+                    &err);
+          continue;
+        }
+        
+        if(Str_Str(buf_server_task_,"PBREADY")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          Server_Post2Buf(0);
+          change_connect(0);
+          continue;
+        }
+        //SOCKETS: IPR STOPPED
+        if(Str_Str(buf_server_task_,"STOPPED")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          Server_Post2Buf(0);
+          change_connect(0);
+          continue;
+        }
+        //+TCPCLOSE:0,Link Closed
+        if(Str_Str(buf_server_task_,"CLOSE")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          Server_Post2Buf(0);
+          change_connect(0);
+          continue;
+        }
+        
+        if(Str_Str(buf_server_task_,"Error")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          Server_Post2Buf(0);
+          change_connect(0);
+          continue;
+        }
+        
         //don't know what's that
         buf_server_task = buf_server_task_;
         Mem_Set(buf_server_task_,0x00,256); //clear the buf
         Server_Post2Buf(buf_server_task_);
         
       }else{
-        OSTimeDlyHMSM(0,0,0,50,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+        OSTimeDly(4,
+             OS_OPT_TIME_DLY,
+             &err);
       }
     }else{
-      //connectstate == 0
-      OSTimeDlyHMSM(0,0,0,100,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
       
       if(buf_server_task != 0){
         Mem_Set(buf_server_task_,0x00,256); //clear the buf
@@ -360,14 +386,16 @@ void Task_Server(void *p_arg){
         
         Server_Post2Buf(0);
       }
+      
+      Device_Cmd(DISABLE);
+      Device_Cmd(ENABLE);
+      connect();
     }
   }
   
 }
 
-void Tmr_ServerCallBack(OS_TMR *p_tmr, void *p_arg){
-  //do nothing
-}
+
 
 void Task_DealServer(void *p_arg){
   CPU_TS ts;
@@ -377,6 +405,7 @@ void Task_DealServer(void *p_arg){
   uint16_t msg_size = 0;
   
   uint8_t * start = 0;
+  uint8_t server_seq_ = 0;
   uint16_t len = 0;
   
   while(DEF_TRUE){
@@ -391,28 +420,30 @@ void Task_DealServer(void *p_arg){
             &err);
     
     start = Str_Str(buf_ptr_,",\x68") + 1;
-    //end = Str_Str(buf_ptr_,"\x16\r\n");  数据中可能要包含0x00的
     
     //check the frame
     len = check_frame(start);
-    /*
-    if(*(start+CON_POSITION) == 0xCA){
-      //请求1级数据  用于应用层请求确认的链路传输。
-      //此用作抄表时  集中器回复确认  集中器在线。
-      device_ack(1);
-    }else{
-      
-    }
-    */
+    
       if(len){
         //the frame is ok
         switch(*(start+AFN_POSITION)){
         case AFN_ACK:
-          if(*(start+CON_POSITION) == SLAVE_FUN_TEST){
-            //the ack of the heart beat
+          //the ack of the server
+            
+          server_seq_ = *(start+SEQ_POSITION) & 0x0F;  //获得该帧的序列号
+          
+          if(server_seq_ == heart_seq){
             OSSemPost(&SEM_HeartBeat,
-                      OS_OPT_POST_1,
-                      &err);
+                    OS_OPT_POST_1,
+                    &err);
+          }else{
+            if(server_seq_ == data_seq){
+              OSSemPost(&SEM_ACKData,
+                        OS_OPT_POST_1,
+                        &err);
+            }else{
+              //抛弃此应答帧
+            }
           }
           break;
         case AFN_LINK_TEST:
@@ -429,12 +460,29 @@ void Task_DealServer(void *p_arg){
           break;
         case AFN_CONTROL:
         case AFN_CURRENT:
-          buf_copy = OSMemGet(&MEM_Buf,&err);
-          if(buf_copy != 0){
-            Mem_Copy(buf_copy,start,len);
-            *(buf_copy + len) = 0x01;  //标识这一帧来自服务器
-            OSQPost(&Q_Read,buf_copy,len,OS_OPT_POST_1,&err);
+          
+          server_seq_ = *(start + SEQ_POSITION) * 0x0F;
+          if(*(start+FN_POSITION) == 0x05){
+            //匹配序列号
+            server_seq = server_seq_;
+            device_ack(0x01,server_seq_);
+          }else{
+            if(server_seq != server_seq_){
+              //新的抄表指令  ack & read
+              buf_copy = OSMemGet(&MEM_Buf,&err);
+              if(buf_copy != 0){
+                Mem_Copy(buf_copy,start,len);
+                *(buf_copy + len) = 0x01;  //标识这一帧来自服务器
+              }
+              server_seq = server_seq_;
+              device_ack(0x01,server_seq_);
+              OSQPost(&Q_Read,buf_copy,len,OS_OPT_POST_1,&err);
+            }else{
+              device_ack(0x01,server_seq_);
+            }
           }
+          
+          
           break;
         case AFN_HISTORY:
           //don't support
@@ -442,8 +490,6 @@ void Task_DealServer(void *p_arg){
           
         }
       }
-    
-    
     OSMemPut(&MEM_Buf,buf_ptr_,&err);
   }
 }
@@ -470,81 +516,93 @@ uint8_t check_frame(uint8_t * start){
   return 0;
 }
 
-void Task_Connect(void *p_arg){
-  CPU_TS ts;
-  OS_ERR err;
-  
-  while(DEF_TRUE){
-    
-    if(connectstate == 0){
-      M590E_Cmd(DISABLE);
-      M590E_Cmd(ENABLE);
-      connect();
-    }
-    OSTimeDlyHMSM(0,0,0,100,
-                 OS_OPT_TIME_HMSM_STRICT,
-                 &err);
-  }
+void addSEQ(void){
+  CPU_SR_ALLOC();
+  CPU_CRITICAL_ENTER();
+  local_seq++;
+  local_seq = local_seq & 0x0F;
+  CPU_CRITICAL_EXIT();
 }
 
 void Task_HeartBeat(void *p_arg){
   OS_ERR err;
   CPU_TS ts;
   uint8_t * buf_frame;
-  //uint16_t * buf_frame_16;
+  uint8_t heart_ack = 0;
   uint8_t i;
   uint8_t beat[17];
   
-  buf_frame = beat;
-  *buf_frame++ = FRAME_HEAD;
-  //buf_frame_16 = (uint16_t *)buf_frame;
-  *buf_frame++ = 0x27;//(9 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  *buf_frame++ = 0x27;//(9 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  //buf_frame = (uint8_t *)buf_frame_16;
-  *buf_frame++ = FRAME_HEAD;
-  
-  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_START | START_FUN_TEST;
-  /**/
-  *buf_frame++ = deviceaddr[0];
-  *buf_frame++ = deviceaddr[1];
-  *buf_frame++ = deviceaddr[2];
-  *buf_frame++ = deviceaddr[3];
-  *buf_frame++ = deviceaddr[4];
-  
-  *buf_frame++ = AFN_LINK_TEST;
-  *buf_frame++ = ZERO_BYTE |SINGLE | CONFIRM;
-  *buf_frame++ = FN_HEARTBEAT;
-  
-  *buf_frame++ = check_cs(beat+6,9);
-  *buf_frame++ = FRAME_END;
-  
   while(DEF_TRUE){
-    if(connectstate == 0){
+    buf_frame = beat;
+    *buf_frame++ = FRAME_HEAD;
+    //buf_frame_16 = (uint16_t *)buf_frame;
+    *buf_frame++ = 0x27;//(9 << 2) | 0x03;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x27;//(9 << 2) | 0x03;
+    *buf_frame++ = 0x00;
+    //buf_frame = (uint8_t *)buf_frame_16;
+    *buf_frame++ = FRAME_HEAD;
+    
+    *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_START | START_FUN_TEST;
+    /**/
+    *buf_frame++ = deviceaddr[0];
+    *buf_frame++ = deviceaddr[1];
+    *buf_frame++ = deviceaddr[2];
+    *buf_frame++ = deviceaddr[3];
+    *buf_frame++ = deviceaddr[4];
+    
+    *buf_frame++ = AFN_LINK_TEST;
+    *buf_frame++ = ZERO_BYTE |SINGLE | CONFIRM | local_seq;
+    heart_seq = local_seq;
+    addSEQ();
+    *buf_frame++ = FN_HEARTBEAT;
+    
+    *buf_frame++ = check_cs(beat+6,9);
+    *buf_frame++ = FRAME_END;
+    if(connectstate){
+      for(i = 0;connectstate && i < 3;i++){
+        heart_ack = 0;
+        if(send_server(beat,17)){
+          OSSemPend(&SEM_HeartBeat,
+                    5000,
+                    OS_OPT_PEND_BLOCKING,
+                    &ts,
+                    &err);
+          if(err == OS_ERR_NONE){
+            heart_ack = 1;
+            break;
+          }
+        }
+      }
+      if(heart_ack){
+        OSTimeDlyHMSM(0,2,0,0,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+      }else{
+        change_connect(0);
+      }
+    }else{
       OSTimeDlyHMSM(0,0,0,100,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
+    }
+  }
+}
+
+void power_cmd(FunctionalState NewState){
+  if(NewState != DISABLE){
+    //打开电源
+    if(slave_mbus == 0xAA){
+      mbus_power(ENABLE);
     }else{
-      if(server_ptr != 0){
-        send_server(beat,17);
-        OSSemPend(&SEM_HeartBeat,
-                  5000,
-                  OS_OPT_PEND_BLOCKING,
-                  &ts,
-                  &err);
-        if(err == OS_ERR_NONE){
-          OSTimeDlyHMSM(0,2,0,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-        }else{
-          change_connect(0);
-        }
-      }else{
-        OSTimeDlyHMSM(0,0,0,100,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
-      }
+      relay_485(ENABLE);
+    }
+  }else{
+    //关闭电源
+    if(slave_mbus == 0xAA){
+      mbus_power(DISABLE);
+    }else{
+      relay_485(DISABLE);
     }
   }
 }
@@ -555,7 +613,6 @@ void Task_Read(void *p_arg){
   uint16_t msg_size;
   uint8_t * buf_frame;
   
-  
   while(DEF_TRUE){
     buf_frame = OSQPend(&Q_Read,
                         0,
@@ -563,26 +620,18 @@ void Task_Read(void *p_arg){
                         &msg_size,
                         &ts,
                         &err);
-    //打开电源
-    if(slave_mbus == 0xAA){
-      mbus_power(ENABLE);
-    }else{
-      relay_485(ENABLE);
-    }
     
     switch(*(buf_frame+AFN_POSITION)){
       case AFN_CONTROL:
+        power_cmd(ENABLE);
         meter_control(buf_frame,*(buf_frame+msg_size));
+        power_cmd(DISABLE);
         break;
       case AFN_CURRENT:
+        power_cmd(ENABLE);
         meter_read(buf_frame,*(buf_frame+msg_size));
+        power_cmd(DISABLE);
         break;
-    }
-    //关闭电源
-    if(slave_mbus == 0xAA){
-      mbus_power(DISABLE);
-    }else{
-      relay_485(DISABLE);
     }
     
     OSMemPut(&MEM_Buf,buf_frame,&err);
@@ -701,7 +750,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
     return;
   }
   
-  //return ack
+  Device_Read(ENABLE);
   if(Mem_Cmp(buf_frame+16,"\xFF\xFF\xFF\xFF\xFF\xFF\xFF",7) == DEF_YES){
     //抄全部表
     for(i = 0;i < cjq_count;i++){
@@ -727,7 +776,6 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         }
       }
       
-      Device_Read(ENABLE);
       for(j=0;j < cjqmeter_count;j++){
         sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
         sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
@@ -736,7 +784,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         
         sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
       }
-      Device_Read(DISABLE);
+      
       
       if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
         //关闭采集器透传
@@ -775,9 +823,9 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
               break;
             }
           }
-          Device_Read(ENABLE);
+          
           meter_read_single(meter_addr,block_meter,meter_type,desc);
-          Device_Read(DISABLE);
+          
           //send the data;
           meter_send(0,block_meter,desc);
           
@@ -794,6 +842,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
       sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
     }
   }
+  Device_Read(DISABLE);
 }
 
 //只管读表
@@ -874,6 +923,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
 //all = 1 发送全部表  all = 0 发送表块对应的表
 void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
   OS_ERR err;
+  CPU_TS ts;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
   uint16_t * buf_frame_16 = 0;
@@ -903,6 +953,9 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
   uint16_t meter_count_ = 0;    //保持一帧中数据体的个数
   uint8_t header = 0;   //一帧的帧头是否已准备
   
+  uint16_t len = 0;
+  uint8_t data_ack = 0;  //发送数据的ack 
+  
   block_meter = block_meter_;
   
   buf_frame = OSMemGet(&MEM_Buf,&err);
@@ -920,8 +973,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     
     *buf_frame++ = FRAME_HEAD;
     buf_frame_16 = (uint16_t *)buf_frame;
-    *buf_frame_16++ = 0x63;//((9+14+1) << 2) | 0x03;
-    *buf_frame_16++ = 0x63;//((9+14+1) << 2) | 0x03;
+    *buf_frame_16++ = 0x73;//((9+14+5) << 2) | 0x03;
+    *buf_frame_16++ = 0x73;//((9+14+5) << 2) | 0x03;
     buf_frame = (uint8_t *)buf_frame_16;
     *buf_frame++ = FRAME_HEAD;
     
@@ -934,10 +987,17 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     *buf_frame++ = deviceaddr[4];
     
     *buf_frame++ = AFN_CURRENT;
-    *buf_frame++ = ZERO_BYTE |SINGLE ;
+    *buf_frame++ = ZERO_BYTE |SINGLE | local_seq;
     *buf_frame++ = FN_CURRENT_METER;
     
+    data_seq = local_seq;
+    addSEQ();
+    
     *buf_frame++ = meter_type;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
     
     for(i=0;i<7;i++){
       *buf_frame++ = meter_addr[i];
@@ -949,15 +1009,27 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     *buf_frame++ = meter_status;
     *buf_frame++ = 0x00;
     
-    *buf_frame++ = check_cs(buf_frame_+6,24);
+    *buf_frame++ = check_cs(buf_frame_+6,28);
     *buf_frame++ = FRAME_END;
     
     if(desc){
       //to m590e
-      send_server(buf_frame_,32);
+      
+      
+      for(k = 0;k < 3;k++){
+        send_server(buf_frame_,36);
+        OSSemPend(&SEM_ACKData,
+                  5000,
+                  OS_OPT_PEND_BLOCKING,
+                  &ts,
+                  &err);
+        if(err == OS_ERR_NONE){
+          break;
+        }
+      }
     }else{
       //to 485
-      Slave_Write(buf_frame_,32);
+      Slave_Write(buf_frame_,36);
     }
   }else{
     //全部表
@@ -990,26 +1062,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
             meter_count = allmeter_count;
             meter_count_ = meter_count;
             
-            *buf_frame++ = FRAME_HEAD;
-            buf_frame_16 = (uint16_t *)buf_frame;
-            *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;    //+1  because of  *buf_frame++ = metertype;
-            *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-            buf_frame = (uint8_t *)buf_frame_16;
-            *buf_frame++ = FRAME_HEAD;
-            
-            *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-            /**/
-            *buf_frame++ = deviceaddr[0];
-            *buf_frame++ = deviceaddr[1];
-            *buf_frame++ = deviceaddr[2];
-            *buf_frame++ = deviceaddr[3];
-            *buf_frame++ = deviceaddr[4];
-            
-            *buf_frame++ = AFN_CURRENT;
-            *buf_frame++ = ZERO_BYTE |SINGLE ;
-            *buf_frame++ = FN_CURRENT_METER;
-            
-            *buf_frame++ = meter_type;
+            len = ((9+14*meter_count_+5) << 2) | 0x03;    //+1  because of  *buf_frame++ = metertype;
             
           }else{
             //多帧
@@ -1018,27 +1071,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
               meter_count = 10;
               meter_count_ = meter_count;
               
-              *buf_frame++ = FRAME_HEAD;
-              buf_frame_16 = (uint16_t *)buf_frame;
-              *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-              *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-              buf_frame = (uint8_t *)buf_frame_16;
-              *buf_frame++ = FRAME_HEAD;
-              
-              *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-              /**/
-              *buf_frame++ = deviceaddr[0];
-              *buf_frame++ = deviceaddr[1];
-              *buf_frame++ = deviceaddr[2];
-              *buf_frame++ = deviceaddr[3];
-              *buf_frame++ = deviceaddr[4];
-              
-              *buf_frame++ = AFN_CURRENT;
-              *buf_frame++ = ZERO_BYTE |MUL_FIRST ;
-              *buf_frame++ = FN_CURRENT_METER;
-              
-              *buf_frame++ = meter_type;
-              
+              len = ((9+14*meter_count_+5) << 2) | 0x03;
             }else{
               if(times_count == times_){
                 //尾帧
@@ -1050,56 +1083,63 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
                   meter_count_ = meter_count;
                 }
                 
-                *buf_frame++ = FRAME_HEAD;
-                buf_frame_16 = (uint16_t *)buf_frame;
-                *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-                *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-                buf_frame = (uint8_t *)buf_frame_16;
-                *buf_frame++ = FRAME_HEAD;
-                
-                *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-                /**/
-                *buf_frame++ = deviceaddr[0];
-                *buf_frame++ = deviceaddr[1];
-                *buf_frame++ = deviceaddr[2];
-                *buf_frame++ = deviceaddr[3];
-                *buf_frame++ = deviceaddr[4];
-                
-                *buf_frame++ = AFN_CURRENT;
-                *buf_frame++ = ZERO_BYTE |MUL_LAST ;
-                *buf_frame++ = FN_CURRENT_METER;
-                
-                *buf_frame++ = meter_type;
-                
+                len = ((9+14*meter_count_+5) << 2) | 0x03;
               }else{
                 //中间帧
                 meter_count = 10;
                 meter_count_ = meter_count;
                 
-                *buf_frame++ = FRAME_HEAD;
-                buf_frame_16 = (uint16_t *)buf_frame;
-                *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-                *buf_frame_16++ = ((9+14*meter_count_+1) << 2) | 0x03;
-                buf_frame = (uint8_t *)buf_frame_16;
-                *buf_frame++ = FRAME_HEAD;
-                
-                *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-                /**/
-                *buf_frame++ = deviceaddr[0];
-                *buf_frame++ = deviceaddr[1];
-                *buf_frame++ = deviceaddr[2];
-                *buf_frame++ = deviceaddr[3];
-                *buf_frame++ = deviceaddr[4];
-                
-                *buf_frame++ = AFN_CURRENT;
-                *buf_frame++ = ZERO_BYTE |MUL_MIDDLE ;
-                *buf_frame++ = FN_CURRENT_METER;
-                
-                *buf_frame++ = meter_type;
+                len = ((9+14*meter_count_+5) << 2) | 0x03;
               }
             }
           }
+          
+          *buf_frame++ = FRAME_HEAD;
+          buf_frame_16 = (uint16_t *)buf_frame;
+          *buf_frame_16++ = len;    //+1  because of  *buf_frame++ = metertype;
+          *buf_frame_16++ = len;
+          buf_frame = (uint8_t *)buf_frame_16;
+          *buf_frame++ = FRAME_HEAD;
+              
+          *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+          /**/
+          *buf_frame++ = deviceaddr[0];
+          *buf_frame++ = deviceaddr[1];
+          *buf_frame++ = deviceaddr[2];
+          *buf_frame++ = deviceaddr[3];
+          *buf_frame++ = deviceaddr[4];
+          
+          *buf_frame++ = AFN_CURRENT;
+          if(times_ == 1){
+            //单帧
+            *buf_frame++ = ZERO_BYTE |SINGLE | CONFIRM| local_seq;
+          }else{
+            //多帧
+            if(times_count == 1){
+              //首帧
+              *buf_frame++ = ZERO_BYTE |MUL_FIRST | CONFIRM| local_seq;
+            }else{
+              if(times_count == times_){
+                //尾帧
+                *buf_frame++ = ZERO_BYTE |MUL_LAST | CONFIRM| local_seq;
+              }else{
+                //中间帧
+                *buf_frame++ = ZERO_BYTE |MUL_MIDDLE | CONFIRM| local_seq;
+              }
+            }
+          }
+          data_seq = local_seq;
+          addSEQ();
+          
+          *buf_frame++ = FN_CURRENT_METER;
+          *buf_frame++ = meter_type;
+          buf_frame_16 = (uint16_t *)buf_frame;
+          *buf_frame_16++ = times_;    //总共多少帧
+          *buf_frame_16++ = times_count;  //第几帧
+          buf_frame = (uint8_t *)buf_frame_16;
         }
+        
+        
         
         for(k=0;k<7;k++){
           *buf_frame++ = meter_addr[k];
@@ -1116,15 +1156,26 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
           header = 0;   //为下一帧做准备
           //发送这一帧
           
-          *buf_frame++ = check_cs(buf_frame_+6,9+14*meter_count_+1);
+          *buf_frame++ = check_cs(buf_frame_+6,9+14*meter_count_+5);
           *buf_frame++ = FRAME_END;
+          
           
           if(desc){
             //to m590e
-            send_server(buf_frame_,17+14*meter_count_+1);
+            for(k = 0;k < 3;k++){
+              send_server(buf_frame_,17+14*meter_count_+5);
+              OSSemPend(&SEM_ACKData,
+                        5000,
+                        OS_OPT_PEND_BLOCKING,
+                        &ts,
+                        &err);
+              if(err == OS_ERR_NONE){
+                break;
+              }
+            }
           }else{
             //to 485
-            Slave_Write(buf_frame_,17+14*meter_count_+1);
+            Slave_Write(buf_frame_,17+14*meter_count_+5);
           }
           
           buf_frame = buf_frame_;
@@ -1157,6 +1208,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
   
   uint8_t meter_fount = 0;
   uint8_t * configflash = 0;
+  uint8_t server_seq_ = 0;  
   //查询是否有这个表
   
   sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
@@ -1166,6 +1218,8 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
     //todo 回应 NACK
     return;
   }
+  
+  Device_Read(ENABLE);
   for(i = 0;meter_fount == 0 && i < cjq_count;i++){
     sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
     sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
@@ -1197,13 +1251,13 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
         }
         
         sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,2);
-        
+        server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
         switch(*(buf_frame + FN_POSITION)){
         case FN_OPEN:
-          meter_open(meter_addr,block_meter,meter_type,desc);
+          meter_open(meter_addr,block_meter,meter_type,desc,server_seq_);
           break;
         case FN_CLOSE:
-          meter_close(meter_addr,block_meter,meter_type,desc);
+          meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
           break;
         }
         
@@ -1219,6 +1273,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
     }
     sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
   }
+  Device_Read(DISABLE);
 }
 
 
@@ -1271,7 +1326,6 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
       *buf_frame++ = check_cs(buf_frame_,11+4);
       *buf_frame++ = FRAME_END;
       
-      Device_Read(ENABLE);
       for(i = 0;success == 0 && i < 3;i++){
         Slave_Write(buf_frame_,13+4);
         buf_readdata = OSQPend(&Q_ReadData,3000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
@@ -1310,7 +1364,6 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
         OSMemPut(&MEM_Buf,configflash,&err);
         
       }
-      Device_Read(DISABLE);
       
       return success;
     }
@@ -1364,7 +1417,6 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
       *buf_frame++ = check_cs(buf_frame_,11+4);
       *buf_frame++ = FRAME_END;
       
-      Device_Read(ENABLE);
       for(i = 0;success == 0 && i < 3;i++){
         Slave_Write(buf_frame_,13+4);
         buf_readdata = OSQPend(&Q_ReadData,3000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
@@ -1403,14 +1455,13 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
         OSMemPut(&MEM_Buf,configflash,&err);
         
       }
-      Device_Read(DISABLE);
       
       return success;
     }
     
 }
 
-void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc){
+void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
     OS_ERR err;
     CPU_TS ts;
     uint8_t buf_frame_[17];
@@ -1442,7 +1493,6 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       fe[i] = 0xFE;
     }
     
-    Device_Read(ENABLE);
     for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+4);
@@ -1480,18 +1530,18 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       *(configflash + 22) = (*(configflash + 22)) | 0x40;
       sFLASH_EraseWritePage(configflash,block_meter,256);
       
-      device_nack(desc);
+      //device_nack(desc,server_seq_);
     }else{
       Mem_Copy(configflash + 22,"\x00",1);  //开
       sFLASH_EraseWritePage(configflash,block_meter,256);
       
-      device_ack(desc);   //return nack;
+      device_ack(desc,server_seq_);   //return nack;
     }
     OSMemPut(&MEM_Buf,configflash,&err);
-    Device_Read(DISABLE);
+    
 }
 
-void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc){
+void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
     OS_ERR err;
     CPU_TS ts;
     uint8_t buf_frame_[17];
@@ -1523,7 +1573,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       fe[i] = 0xFE;
     }
     
-    Device_Read(ENABLE);
     for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+4);
@@ -1562,16 +1611,15 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       *(configflash + 22) = (*(configflash + 22)) | 0x40;
       sFLASH_EraseWritePage(configflash,block_meter,256);
       
-      device_nack(desc);  //return nack;
+      //device_nack(desc,server_seq_);  //return nack;
     }else{
       Mem_Copy(configflash + 22,"\x02",1);  //关阀
       sFLASH_EraseWritePage(configflash,block_meter,256);
       
-      device_ack(desc);  //return ack;
+      device_ack(desc,server_seq_);  //return ack;
     }
     
     OSMemPut(&MEM_Buf,configflash,&err);
-    Device_Read(DISABLE);
 }
 
 //config and query the parameter
@@ -1580,7 +1628,6 @@ void Task_Config(void *p_arg){
   CPU_TS ts;
   uint16_t msg_size;
   uint8_t * buf_frame;
-  
   
   while(DEF_TRUE){
     buf_frame = OSQPend(&Q_Config,
@@ -1616,7 +1663,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
   
   uint32_t block_cjq = 0;   //cjq block 地址
   uint32_t block_meter = 0;  //meter block 地址
-  
+  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
   switch(*(buf_frame + FN_POSITION)){
   case FN_IP_PORT:
     ip1 = *(buf_frame + DATA_POSITION + 3);
@@ -1671,7 +1718,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     OSMemPut(&MEM_Buf,configflash,&err);
     
-    device_ack(desc);
+    device_ack(desc,server_seq_);
     
     break;
   case FN_ADDR:
@@ -1680,7 +1727,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     deviceaddr[1] = *(buf_frame + DATA_POSITION + 1);
     deviceaddr[2] = *(buf_frame + DATA_POSITION + 2);
     deviceaddr[3] = *(buf_frame + DATA_POSITION + 3);
-    deviceaddr[4] = 0x00;//*(buf_frame + DATA_POSITION + 4);  协议第5位默认为0x00
+    deviceaddr[4] = *(buf_frame + DATA_POSITION + 4);  //与新天协议有出入 协议第5位默认为0x00
     
     configflash = OSMemGet(&MEM_Buf,&err);
     
@@ -1690,7 +1737,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     OSMemPut(&MEM_Buf,configflash,&err);
     
-    device_ack(desc);
+    device_ack(desc,server_seq_);
     
     break;
   case FN_METER:
@@ -1704,7 +1751,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
         }else{
           //有这个表  删除这个表
           delete_meter(block_cjq,block_meter);
-          device_ack(desc);
+          device_ack(desc,server_seq_);
         }
       }
       
@@ -1713,7 +1760,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
         if(block_meter == 0xFFFFFF){
           //没有这个表 添加
           add_meter(block_cjq,buf_frame + DATA_POSITION + 3);
-          device_ack(desc);
+          device_ack(desc,server_seq_);
         }else{
           //有这个表 do nothing
         }
@@ -1730,7 +1777,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       }else{
         //有这个采集器  将这个采集器下的表Q清空  将采集器删除
         delete_cjq(block_cjq);
-        device_ack(desc);
+        device_ack(desc,server_seq_);
       }
     }
     
@@ -1739,7 +1786,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       if(search_cjq(buf_frame + DATA_POSITION + 1) == 0xFFFFFF){
         //添加这个采集器
         add_cjq(buf_frame + DATA_POSITION + 1);
-        device_ack(desc);
+        device_ack(desc,server_seq_);
       }else{
         //已经有这个采集器了
       }
@@ -1764,7 +1811,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     OSMemPut(&MEM_Buf,configflash,&err);
     
-    device_ack(desc);
+    device_ack(desc,server_seq_);
     break;
   }
   
@@ -2101,21 +2148,22 @@ uint32_t delete_cjq(uint32_t block_cjq){
 }
 
 void param_query(uint8_t * buf_frame,uint8_t desc){
+  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
   switch(*(buf_frame + FN_POSITION)){
   case FN_IP_PORT:
-    ack_query_ip(desc);
+    ack_query_ip(desc,server_seq_);
     break;
   case FN_ADDR: 
-    ack_query_addr(desc);
+    ack_query_addr(desc,server_seq_);
     break;
   case FN_METER:
-    ack_query_meter(*(buf_frame + DATA_POSITION),buf_frame + DATA_POSITION + 1,desc);
+    ack_query_meter(*(buf_frame + DATA_POSITION),buf_frame + DATA_POSITION + 1,desc,server_seq_);
     break;
   case FN_CJQ:
-    ack_query_cjq(desc);
+    ack_query_cjq(desc,server_seq_);
     break;
   case FN_MBUS:
-    ack_query_mbus(desc);
+    ack_query_mbus(desc,server_seq_);
     break;
   }
 }
@@ -2153,7 +2201,7 @@ void Task_LED1(void *p_arg){
   }
 }
 
-void device_ack(uint8_t desc){
+void device_ack(uint8_t desc,uint8_t server_seq_){
   uint8_t ack[17];
   uint8_t * buf_frame;
   
@@ -2174,7 +2222,7 @@ void device_ack(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_ACK;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_ACK;
   
   *buf_frame++ = check_cs(ack+6,9);
@@ -2190,7 +2238,7 @@ void device_ack(uint8_t desc){
   
 }
 
-void device_nack(uint8_t desc){
+void device_nack(uint8_t desc,uint8_t server_seq_){
   uint8_t nack[17];
   uint8_t * buf_frame;
   
@@ -2211,7 +2259,7 @@ void device_nack(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_ACK;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_NACK;
   
   *buf_frame++ = check_cs(nack+6,9);
@@ -2227,7 +2275,7 @@ void device_nack(uint8_t desc){
   
 }
 
-void ack_query_cjq(uint8_t desc){
+void ack_query_cjq(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame;
   uint8_t * buf_frame_;
@@ -2263,7 +2311,7 @@ void ack_query_cjq(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_QUERY;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_CJQ;
   
   for(i = 0;i < cjq_count;i++){
@@ -2291,7 +2339,7 @@ void ack_query_cjq(uint8_t desc){
   
 }
 
-void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
+void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame;
   uint8_t * buf_frame_;
@@ -2304,6 +2352,8 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
   uint8_t remain;
   uint16_t times_;      //一共要发送多少帧
   uint16_t times_count; //发送了多少帧了
+  
+  uint16_t len = 0;  //当前帧的数据长度
   
   uint32_t block_cjq;
   uint32_t block_meter;
@@ -2359,31 +2409,12 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
         if(header == 0){
           header = 1;
           times_count++;
+          *buf_frame++ = FRAME_HEAD;
           if(times_ == 1){
             //单帧
             meter_count = allmeter_count;
             meter_count_ = meter_count;
-            
-            *buf_frame++ = FRAME_HEAD;
-            buf_frame_16 = (uint16_t *)buf_frame;
-            *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;    //+1  because of  *buf_frame++ = metertype;
-            *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-            buf_frame = (uint8_t *)buf_frame_16;
-            *buf_frame++ = FRAME_HEAD;
-            
-            *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-            /**/
-            *buf_frame++ = deviceaddr[0];
-            *buf_frame++ = deviceaddr[1];
-            *buf_frame++ = deviceaddr[2];
-            *buf_frame++ = deviceaddr[3];
-            *buf_frame++ = deviceaddr[4];
-            
-            *buf_frame++ = AFN_QUERY;
-            *buf_frame++ = ZERO_BYTE |SINGLE ;
-            *buf_frame++ = FN_METER;
-            
-            *buf_frame++ = metertype;
+            len = ((9+17*meter_count_+1) << 2) | 0x03;    //+1  because of  *buf_frame++ = metertype;
             
           }else{
             //多帧
@@ -2391,27 +2422,7 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
               //首帧
               meter_count = 10;
               meter_count_ = meter_count;
-              
-              *buf_frame++ = FRAME_HEAD;
-              buf_frame_16 = (uint16_t *)buf_frame;
-              *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-              *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-              buf_frame = (uint8_t *)buf_frame_16;
-              *buf_frame++ = FRAME_HEAD;
-              
-              *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-              /**/
-              *buf_frame++ = deviceaddr[0];
-              *buf_frame++ = deviceaddr[1];
-              *buf_frame++ = deviceaddr[2];
-              *buf_frame++ = deviceaddr[3];
-              *buf_frame++ = deviceaddr[4];
-              
-              *buf_frame++ = AFN_QUERY;
-              *buf_frame++ = ZERO_BYTE |MUL_FIRST ;
-              *buf_frame++ = FN_METER;
-              
-              *buf_frame++ = metertype;
+              len = ((9+17*meter_count_+1) << 2) | 0x03;
               
             }else{
               if(times_count == times_){
@@ -2423,56 +2434,54 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
                   meter_count = remain;
                   meter_count_ = meter_count;
                 }
-                
-                *buf_frame++ = FRAME_HEAD;
-                buf_frame_16 = (uint16_t *)buf_frame;
-                *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-                *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-                buf_frame = (uint8_t *)buf_frame_16;
-                *buf_frame++ = FRAME_HEAD;
-                
-                *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-                /**/
-                *buf_frame++ = deviceaddr[0];
-                *buf_frame++ = deviceaddr[1];
-                *buf_frame++ = deviceaddr[2];
-                *buf_frame++ = deviceaddr[3];
-                *buf_frame++ = deviceaddr[4];
-                
-                *buf_frame++ = AFN_QUERY;
-                *buf_frame++ = ZERO_BYTE |MUL_LAST ;
-                *buf_frame++ = FN_METER;
-                
-                *buf_frame++ = metertype;
+                len = ((9+17*meter_count_+1) << 2) | 0x03;
                 
               }else{
                 //中间帧
                 meter_count = 10;
                 meter_count_ = meter_count;
+                len = ((9+17*meter_count_+1) << 2) | 0x03;
                 
-                *buf_frame++ = FRAME_HEAD;
-                buf_frame_16 = (uint16_t *)buf_frame;
-                *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-                *buf_frame_16++ = ((9+17*meter_count_+1) << 2) | 0x03;
-                buf_frame = (uint8_t *)buf_frame_16;
-                *buf_frame++ = FRAME_HEAD;
-                
-                *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-                /**/
-                *buf_frame++ = deviceaddr[0];
-                *buf_frame++ = deviceaddr[1];
-                *buf_frame++ = deviceaddr[2];
-                *buf_frame++ = deviceaddr[3];
-                *buf_frame++ = deviceaddr[4];
-                
-                *buf_frame++ = AFN_QUERY;
-                *buf_frame++ = ZERO_BYTE |MUL_MIDDLE ;
-                *buf_frame++ = FN_METER;
-                
-                *buf_frame++ = metertype;
               }
             }
           }
+          
+          buf_frame_16 = (uint16_t *)buf_frame;
+          *buf_frame_16++ = len;
+          *buf_frame_16++ = len;
+          buf_frame = (uint8_t *)buf_frame_16;
+          *buf_frame++ = FRAME_HEAD;
+          
+          *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+          *buf_frame++ = deviceaddr[0];
+          *buf_frame++ = deviceaddr[1];
+          *buf_frame++ = deviceaddr[2];
+          *buf_frame++ = deviceaddr[3];
+          *buf_frame++ = deviceaddr[4];
+              
+          *buf_frame++ = AFN_QUERY;
+          
+          if(times_ == 1){
+            //单帧
+            *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
+          }else{
+            //多帧
+            if(times_count == 1){
+              //首帧
+              *buf_frame++ = ZERO_BYTE |MUL_FIRST | server_seq_;
+            }else{
+              if(times_count == times_){
+                //尾帧
+                *buf_frame++ = ZERO_BYTE |MUL_LAST | server_seq_;
+              }else{
+                //中间帧
+               *buf_frame++ = ZERO_BYTE |MUL_MIDDLE | server_seq_;
+              }
+            }
+          }
+          
+          *buf_frame++ = FN_METER;
+          *buf_frame++ = metertype;
         }
         
         *buf_frame++ = 0x00;
@@ -2547,7 +2556,7 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
       *buf_frame++ = deviceaddr[4];
       
       *buf_frame++ = AFN_QUERY;
-      *buf_frame++ = ZERO_BYTE |SINGLE ;
+      *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
       *buf_frame++ = FN_METER;
       
       *buf_frame++ = metertype;
@@ -2579,7 +2588,7 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc){
   
 }
 
-void ack_query_addr(uint8_t desc){
+void ack_query_addr(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame;
   uint8_t * buf_frame_;
@@ -2605,7 +2614,7 @@ void ack_query_addr(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_QUERY;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_ADDR;
   
   *buf_frame++ = check_cs(buf_frame_+6,9);
@@ -2623,7 +2632,7 @@ void ack_query_addr(uint8_t desc){
   OSMemPut(&MEM_Buf,buf_frame_,&err);
 }
 
-void ack_query_ip(uint8_t desc){
+void ack_query_ip(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
@@ -2650,7 +2659,7 @@ void ack_query_ip(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_QUERY;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_IP_PORT;
   
   *buf_frame++ = ip1;
@@ -2678,7 +2687,7 @@ void ack_query_ip(uint8_t desc){
   
 }
 
-void ack_query_mbus(uint8_t desc){
+void ack_query_mbus(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
@@ -2705,7 +2714,7 @@ void ack_query_mbus(uint8_t desc){
   *buf_frame++ = deviceaddr[4];
   
   *buf_frame++ = AFN_QUERY;
-  *buf_frame++ = ZERO_BYTE |SINGLE ;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_MBUS;
   
   *buf_frame++ = slave_mbus;

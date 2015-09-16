@@ -4,22 +4,17 @@
 #include "serial.h"
 #include "os.h"
 #include "lib_str.h"
-#include "m590e.h"
+#include "gprs.h"
 #include "spi_flash.h"
 #include "stdlib.h"
-    
+
 
 extern OS_MEM MEM_Buf;
 extern OS_MEM MEM_ISR;
 
-extern OS_SEM SEM_Connected;
 extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
 extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
 extern OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
-
-extern OS_TMR TMR_Server;       //20s
-extern OS_TMR TMR_Server_2s;      //2s
-extern OS_TMR TMR_Server_100;      //100ms
 
 
 extern volatile uint8_t connectstate;
@@ -33,7 +28,7 @@ uint8_t password[10] = "\"1234\"\r";            //apn 的用户名必须为由双引号包围
 //uint8_t dns[25] = "\"www.xcxdtech.com\"\r";     //the server 
 uint8_t dns[25] = "\"avenger0422.vicp.cc\"\r";     //the server 
 uint8_t ip[17] = "218.28.41.74";                 //the server ip
-uint8_t port[8] = ",3333\r";                     //the server port
+uint8_t port[8] = ",5555\r";                     //the server port
 uint8_t deviceaddr[5] = {0x00,0x00,0x00,0x00,0x00};      //设备地址
 
 uint8_t ip1 = 74;
@@ -41,20 +36,32 @@ uint8_t ip2 = 41;
 uint8_t ip3 = 28;
 uint8_t ip4 = 218;
 uint16_t port_ = 3333;
-
+u8 *ats[20]={
+	"AT\r",
+	"ATE0\r",   //关闭回显
+	"AT+CCID\r",  //获取SIM卡标识
+	"AT+CSQ\r",   //查询信号强度
+	"AT+CREG?\r",  //检查网络注册状态
+	"AT+XISP=0\r",  //设置成内部协议
+	"AT+CGDCONT=1,\"IP\",\"CMNET\"\r",  //设置APN
+	"AT+XGAUTH=1,1,\"GSM\",\"1234\"\r",   //专网用户认证
+	"AT+CGATT?\r",  //GPRS附着
+	"AT+XIIC=1\r",   //建立PPP连接
+	"AT+XIIC?\r",    //检查PPP链路状态
+	"AT+DNS=",   //DNS获取IP
+	"AT+TCPSETUP=0,",   //+ip+port 建立TCP连接
+	"AT+TCPSEND=0,",    //在链路0 上发送数据
+	"AT+IPSTATUS=0\r"   //查询链路0的链路状态
+};
 
 /*
 after Enable   need wait the "+PBREADY"   received the "+PBREADY" M590E is start up
 */
 
-ErrorStatus M590E_Cmd(FunctionalState NewState){
+ErrorStatus Device_Cmd(FunctionalState NewState){
   OS_ERR err;
   CPU_TS ts;
-  uint16_t msg_size;
-  uint8_t data;
-  uint8_t * mem_ptr;
-  uint8_t i;
-  CPU_SR_ALLOC();
+  uint8_t cnt = 0;
   uint8_t * buf_server = 0;
   uint8_t * buf_server_ = 0;
   
@@ -72,20 +79,20 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
     Server_Post2Buf(buf_server_);   //post to the buf
     
     //wait the "+PBREADY"
-    OSTmrStart(&TMR_Server,&err);
-    while(OSTmrStateGet(&TMR_Server,&err) == OS_TMR_STATE_RUNNING){
-      OSTimeDlyHMSM(0,0,0,20,
+    while(cnt < 250){
+      OSTimeDlyHMSM(0,0,0,100,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
       if(server_ptr - server_ptr_ > 10){
         check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-        if(Str_Str(buf_server_,"+PBREADY")){
+        if(Str_Str(buf_server_,"+PBREADY\r\n")){
           OSMemPut(&MEM_Buf,buf_server_,&err);
           
           Server_Post2Buf(0);
           return SUCCESS;
         }
       }
+      cnt++;
     }
     
     OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -102,40 +109,18 @@ ErrorStatus M590E_Cmd(FunctionalState NewState){
   }
 }
 
-uint8_t * M590E_ReadAT_100(uint8_t * buf_server){
+uint8_t * Send_ReadATs(uint8_t *at,uint8_t *buf_server,uint32_t timeout){
   OS_ERR err;
   CPU_TS ts;
   
-  Server_Post2Buf(buf_server);
-  
-  OSTmrStart(&TMR_Server_100,&err);
-  while(OSTmrStateGet(&TMR_Server_100,&err) == OS_TMR_STATE_RUNNING){
-    OSTimeDlyHMSM(0,0,0,20,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-  }
+  Server_WriteStr(at);
+  Server_Post2Buf(buf_server);  //接收数据到buf_server
+  OSTimeDly(timeout,
+             OS_OPT_TIME_DLY,
+             &err);
   buf_server = server_ptr;
   
-  Server_Post2Buf(0);
-  return buf_server;
-}
-
-uint8_t * M590E_ReadAT_2s(uint8_t * buf_server){
-  OS_ERR err;
-  CPU_TS ts;
-  uint16_t msg_size;
-  
-  Server_Post2Buf(buf_server);
-  
-  OSTmrStart(&TMR_Server_2s,&err);
-  while(OSTmrStateGet(&TMR_Server_2s,&err) == OS_TMR_STATE_RUNNING){
-    OSTimeDlyHMSM(0,0,0,20,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-  }
-  buf_server = server_ptr;
-  
-  Server_Post2Buf(0);
+  Server_Post2Buf(0);   //停止接收数据
   return buf_server;
 }
 
@@ -143,14 +128,15 @@ void check_str(uint8_t * start,uint8_t * end){
   uint8_t * s;
   s = start;
   while(*s == 0x00 && s < end){
-    *s = '\r';
-    s++;
+    *s++ = '\r';
   }
 }
 
 ErrorStatus at(void){
   
 }
+
+
 ErrorStatus ate(void){
   uint8_t i;
   OS_ERR err;
@@ -162,10 +148,14 @@ ErrorStatus ate(void){
   buf_server_ = buf_server;
   
   for(i = 0;i < 3;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+    }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(ATE);
-    buf_server = M590E_ReadAT_100(buf_server_);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    buf_server = Send_ReadATs(ats[1],buf_server_,100);
+    check_str(buf_server_,buf_server);    //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
@@ -174,6 +164,8 @@ ErrorStatus ate(void){
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
+
+
 ErrorStatus at_ccid(void){
   uint8_t i;
   OS_ERR err;
@@ -184,10 +176,14 @@ ErrorStatus at_ccid(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+    }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CCID);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[2],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"+CCID")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -202,30 +198,42 @@ ErrorStatus at_csq(void){
   OS_ERR err;
   uint8_t good = 0;
   
+  uint8_t *rssi_ptr = 0;
+  uint8_t rssi = 0;
+  uint8_t *ber_ptr = 0;
+  uint8_t ber = 0;
+  
   uint8_t * buf_server = 0;
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 20;i++){
+  for(i = 0;i < 100;i++){
     if(i != 0){
       OSTimeDlyHMSM(0,0,0,200,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CSQ);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[3],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"+CSQ: 99,99")){
-      good = 0;
-    }else{
-      good++;
-      if(good > 3){
-        OSMemPut(&MEM_Buf,buf_server_,&err);
-        return SUCCESS;
+    if(Str_Str(buf_server_,"+CSQ: ")){
+      rssi_ptr = Str_Char_N(buf_server_,256,':')+2;
+      rssi = atoi(rssi_ptr);
+      ber_ptr = Str_Char_N(buf_server_,256,',')+1;
+      ber = atoi(ber_ptr);
+      if(rssi > 5 && ber != 99){
+        good++;
+        if(good > 6){
+          OSMemPut(&MEM_Buf,buf_server_,&err);
+          return SUCCESS;
+        }
+      }else{
+        good = 0;
       }
+    }else{
+      good = 0;
     }
   }
   OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -241,15 +249,14 @@ ErrorStatus at_creg(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 20;i++){
+  for(i = 0;i < 100;i++){
     if(i != 0){
       OSTimeDlyHMSM(0,0,0,200,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CREG);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[4],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"+CREG: 0,1") || Str_Str(buf_server_,"+CREG: 0,5")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -259,6 +266,7 @@ ErrorStatus at_creg(void){
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
+
 ErrorStatus at_xisp(void){
   uint8_t i;
   OS_ERR err;
@@ -269,20 +277,21 @@ ErrorStatus at_xisp(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  //for(i = 0;i < 3;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_XISP);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[5],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
-  }
+  //}
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
-ErrorStatus at_cgdcont(void){
+
+
+ErrorStatus at_apn(void){
   uint8_t i;
   OS_ERR err;
   
@@ -292,21 +301,19 @@ ErrorStatus at_cgdcont(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  //for(i = 0;i < 3;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CGDCONT);
-    Server_WriteStr(apn);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[6],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
-  }
+  //}
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
-ErrorStatus at_xgauth(void){
+ErrorStatus at_auth(void){
   uint8_t i;
   OS_ERR err;
   
@@ -316,44 +323,19 @@ ErrorStatus at_xgauth(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  //for(i = 0;i < 3;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_XGAUTH);
-    Server_WriteStr(username);
-    Server_WriteStr(password);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[7],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
-  }
+  //}
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
-ErrorStatus at_cgatt(void){
-  uint8_t i;
-  OS_ERR err;
-  
-  uint8_t * buf_server = 0;
-  uint8_t * buf_server_ = 0;
-  
-  buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 3;i++){
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CGATT);
-    buf_server = M590E_ReadAT_100(buf_server_);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"OK")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
-  }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
-  return ERROR;
-}
+
 ErrorStatus check_cgatt(void){
   uint8_t i;
   OS_ERR err;
@@ -364,15 +346,14 @@ ErrorStatus check_cgatt(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 20;i++){
+  for(i = 0;i < 100;i++){
     if(i != 0){
       OSTimeDlyHMSM(0,0,0,200,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CGATT_);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[8],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"+CGATT: 1")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -394,8 +375,7 @@ ErrorStatus at_xiic(void){
   
   for(i = 0;i < 3;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_XIIC);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[9],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -422,8 +402,7 @@ ErrorStatus check_xiic(void){
                     &err);
     }
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_XIIC_);
-    buf_server = M590E_ReadAT_100(buf_server_);
+    buf_server = Send_ReadATs(ats[10],buf_server_,100);
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"+XIIC:    1")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
@@ -446,11 +425,18 @@ ErrorStatus at_dns(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  for(i = 0;i < 100;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_DNS);
+    Server_WriteStr(ats[11]);
     Server_WriteStr(dns);
-    buf_server = M590E_ReadAT_2s(buf_server_);
+    
+    Server_Post2Buf(buf_server);  //接收数据到buf_server
+    OSTimeDly(2000,
+               OS_OPT_TIME_DLY,
+               &err);
+    buf_server = server_ptr;
+    Server_Post2Buf(0);   //停止接收数据
+    
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"\r\n+DNS:OK\r\n")){
       ip_start = Str_Str(buf_server_,"+DNS:");
@@ -463,33 +449,14 @@ ErrorStatus at_dns(void){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
+    OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
   }
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
-ErrorStatus at_tcpclose(void){
-  uint8_t i;
-  OS_ERR err;
-  
-  uint8_t * buf_server = 0;
-  uint8_t * buf_server_ = 0;
-  
-  buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 3;i++){
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_TCPCLOSE);
-    buf_server = M590E_ReadAT_100(buf_server_);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"+TCPCLOSE:0,OK")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
-  }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
-  return ERROR;
-}
+
 ErrorStatus at_tcpsetup(void){
   uint8_t i;
   OS_ERR err;
@@ -500,46 +467,28 @@ ErrorStatus at_tcpsetup(void){
   buf_server = OSMemGet(&MEM_Buf,&err);
   buf_server_ = buf_server;
   
-  for(i = 0;i < 3;i++){
+  //for(i = 0;i < 3;i++){
     Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_TCPSETUP);
+    Server_WriteStr(ats[12]);
     Server_WriteStr(ip);
     Server_WriteStr(port);
-    buf_server = M590E_ReadAT_2s(buf_server_);
+    
+    Server_Post2Buf(buf_server);  //接收数据到buf_server
+    OSTimeDly(2000,
+               OS_OPT_TIME_DLY,
+               &err);
+    buf_server = server_ptr;
+    Server_Post2Buf(0);   //停止接收数据
+    
     check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
     if(Str_Str(buf_server_,"+TCPSETUP:0,OK")){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
-  }
+  //}
   OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
-
-ErrorStatus M590E_SoftOFF(void){
-  uint8_t i;
-  OS_ERR err;
-  
-  uint8_t * buf_server = 0;
-  uint8_t * buf_server_ = 0;
-  
-  buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 3;i++){
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    Server_WriteStr(AT_CPWROFF);
-    buf_server = M590E_ReadAT_100(buf_server_);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"OK")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
-  }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
-  return ERROR;
-}
-
 
 ErrorStatus connect(void){
   OS_ERR err;
@@ -558,10 +507,10 @@ ErrorStatus connect(void){
   if(at_xisp() == ERROR){
     return ERROR;
   }
-  if(at_cgdcont() == ERROR){
+  if(at_apn() == ERROR){
     return ERROR;
   }
-  if(at_xgauth() == ERROR){
+  if(at_auth() == ERROR){
     return ERROR;
   }
   if(check_cgatt() == ERROR){
@@ -597,22 +546,10 @@ ErrorStatus send_server(uint8_t * data,uint16_t count){
   OS_ERR err;
   uint8_t sendcount[5];
   
-  //check the line
-  
-  Server_WriteStr(AT_IPSTATUS);
-  OSSemPend(&SEM_Send_Online,
-            3000,
-            OS_OPT_PEND_BLOCKING,
-            &ts,
-            &err);
-  if(err != OS_ERR_NONE){
-    return ERROR;
-  }
-  
   //send the data
   sprintf(sendcount,"%d",count);
   
-  Server_WriteStr(AT_TCPSEND);
+  Server_WriteStr(ats[13]);
   Server_WriteStr(sendcount);
   Server_WriteStr("\r");
   

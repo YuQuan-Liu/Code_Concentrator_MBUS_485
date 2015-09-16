@@ -24,10 +24,6 @@ CPU_STK STK_Server[APP_START_TASK_STK_SIZE];
 OS_TCB TCB_Slave;
 CPU_STK STK_Slave[APP_START_TASK_STK_SIZE];
 
-//connect to the server
-OS_TCB TCB_Connect;
-CPU_STK STK_Connect[APP_START_TASK_STK_SIZE];
-
 //设置任务
 OS_TCB TCB_Config;
 CPU_STK STK_Config[APP_START_TASK_STK_SIZE*3];
@@ -69,11 +65,9 @@ OS_SEM SEM_Slave_485TX;     //往采集器、表发送数据
 OS_SEM SEM_Slave_mbusTX;
 
 OS_SEM SEM_HeartBeat;    //接收服务器数据Task to HeartBeat Task  接收到心跳的回应
-OS_SEM SEM_Restart;      //HeartBeat Task to Connection Task  重启模块
+OS_SEM SEM_ACKData;    //服务器对数据的ACK
 OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
 OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
-OS_SEM SEM_Connected;   //m590e online  
-OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
 
 //OS_Qs
 OS_Q Q_Slave;            //采集器、表发送过来的数据
@@ -175,7 +169,7 @@ void TaskStart(void *p_arg){
     OSMemPut(&MEM_Buf,buf,&err);
   }
   //Open the IWDG;
-  BSP_IWDG_Init();
+  //BSP_IWDG_Init();
   
   while(DEF_TRUE){
     /* Reload IWDG counter */
@@ -217,20 +211,6 @@ void TaskCreate(void){
                (void *) 0,
                (OS_PRIO )APP_START_TASK_PRIO + 2,
                (CPU_STK *)&STK_Server[0],
-               (CPU_STK_SIZE)APP_START_TASK_STK_SIZE/10,
-               (CPU_STK_SIZE)APP_START_TASK_STK_SIZE,
-               (OS_MSG_QTY) 0u,
-               (OS_TICK) 0u,
-               (void *) 0,
-               (OS_OPT) (OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
-               (OS_ERR *)&err);
-  /*connect to the server */
-  OSTaskCreate((OS_TCB  *)&TCB_Connect,
-               (CPU_CHAR *)"connect",
-               (OS_TASK_PTR )Task_Connect,
-               (void *) 0,
-               (OS_PRIO )APP_START_TASK_PRIO + 3,
-               (CPU_STK *)&STK_Connect[0],
                (CPU_STK_SIZE)APP_START_TASK_STK_SIZE/10,
                (CPU_STK_SIZE)APP_START_TASK_STK_SIZE,
                (OS_MSG_QTY) 0u,
@@ -384,8 +364,8 @@ void ObjCreate(void){
     return;
   }
   
-  OSSemCreate(&SEM_Restart,
-              "restart",
+  OSSemCreate(&SEM_ACKData,
+              "ackdata",
               0,
               &err);
   if(err != OS_ERR_NONE){
@@ -402,22 +382,6 @@ void ObjCreate(void){
   
   OSSemCreate(&SEM_SendOver,
               "sendover",
-              0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
-  OSSemCreate(&SEM_Connected,
-              "connected",
-              0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
-  OSSemCreate(&SEM_Send_Online,
-              "connected",
               0,
               &err);
   if(err != OS_ERR_NONE){
@@ -466,61 +430,6 @@ void ObjCreate(void){
     return;
   }
   //OS_TMR
-  OSTmrCreate(&TMR_Server,
-              "25s",
-              250,
-              0,
-              OS_OPT_TMR_ONE_SHOT,
-              (OS_TMR_CALLBACK_PTR)Tmr_ServerCallBack,
-              (void *)0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  /*
-  OSTmrStart(&TMR_Server,
-             &err);
-  if(err != OS_ERR_NONE){
-    asm("NOP");
-    return;
-  }
-  */
-  OSTmrCreate(&TMR_Server_2s,
-              "2s",
-              20,
-              0,
-              OS_OPT_TMR_ONE_SHOT,
-              (OS_TMR_CALLBACK_PTR)Tmr_ServerCallBack,
-              (void *)0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
-  OSTmrCreate(&TMR_Server_100,
-              "100ms",
-              1,
-              0,
-              OS_OPT_TMR_ONE_SHOT,
-              (OS_TMR_CALLBACK_PTR)Tmr_ServerCallBack,
-              (void *)0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
-  OSTmrCreate(&TMR_Server_200,
-              "200ms",
-              2,
-              0,
-              OS_OPT_TMR_ONE_SHOT,
-              (OS_TMR_CALLBACK_PTR)Tmr_ServerCallBack,
-              (void *)0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
-  
   OSTmrCreate(&TMR_Slave,
               "slave",
               10,

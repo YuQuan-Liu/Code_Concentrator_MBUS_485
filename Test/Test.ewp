@@ -1901,13 +1901,16 @@
       <name>$PROJ_DIR$\APP\frame.h</name>
     </file>
     <file>
+      <name>$PROJ_DIR$\APP\frame_188.h</name>
+    </file>
+    <file>
+      <name>$PROJ_DIR$\APP\gprs.h</name>
+    </file>
+    <file>
       <name>$PROJ_DIR$\APP\includes.h</name>
     </file>
     <file>
       <name>$PROJ_DIR$\APP\m590e.c</name>
-    </file>
-    <file>
-      <name>$PROJ_DIR$\APP\m590e.h</name>
     </file>
     <file>
       <name>$PROJ_DIR$\APP\main.c</name>
