@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# IAR ELF Linker V7.10.3.6832/W32 for ARM                 17/Sep/2015  17:38:40
+# IAR ELF Linker V7.10.3.6832/W32 for ARM                 17/Sep/2015  20:22:05
 # Copyright 2007-2014 IAR Systems AB.
 #
 #    Output file  =  D:\IAR_Workspace\STM32F103MBUS\Test\Debug\Exe\Test.out
@@ -989,7 +989,7 @@ ip3                     0x200000c8    0x1  Data  Gb  m590e.o [1]
 ip4                     0x200000c9    0x1  Data  Gb  m590e.o [1]
 local_seq               0x20003d16    0x1  Data  Gb  tasks.o [1]
 main                    0x0800a729   0x52  Code  Gb  main.o [1]
-mbus_power              0x08000a59   0x38  Code  Gb  tasks.o [1]
+mbus_power              0x08000a59   0x3a  Code  Gb  tasks.o [1]
 mem_buf                 0x2000130c  0x600  Data  Gb  main.o [1]
 mem_isr                 0x20003a0c   0x78  Data  Gb  main.o [1]
 memchr                  0x08009c19         Code  Gb  memchr.o [5]
@@ -1008,11 +1008,11 @@ port                    0x200000b4    0x8  Data  Gb  m590e.o [1]
 port_                   0x200000c4    0x2  Data  Gb  m590e.o [1]
 power_cmd               0x080009b5   0x3c  Code  Gb  tasks.o [1]
 reading                 0x20003d0b    0x1  Data  Gb  main.o [1]
-relay_1                 0x08000ac7   0x34  Code  Gb  tasks.o [1]
-relay_2                 0x08000afb   0x34  Code  Gb  tasks.o [1]
-relay_3                 0x08000b2f   0x34  Code  Gb  tasks.o [1]
-relay_4                 0x08000b63   0x34  Code  Gb  tasks.o [1]
-relay_485               0x08000a91   0x36  Code  Gb  tasks.o [1]
+relay_1                 0x08000ac9   0x34  Code  Gb  tasks.o [1]
+relay_2                 0x08000afd   0x34  Code  Gb  tasks.o [1]
+relay_3                 0x08000b31   0x34  Code  Gb  tasks.o [1]
+relay_4                 0x08000b65   0x34  Code  Gb  tasks.o [1]
+relay_485               0x08000a93   0x36  Code  Gb  tasks.o [1]
 sFLASH_EraseBulk        0x08005a99   0x2e  Code  Gb  spi_flash.o [1]
 sFLASH_EraseSector      0x08005a55   0x44  Code  Gb  spi_flash.o [1]
 sFLASH_EraseWritePage   0x08005b23   0x62  Code  Gb  spi_flash.o [1]

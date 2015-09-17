@@ -644,7 +644,7 @@ uint8_t mbus_power(FunctionalState NewState){
   if(NewState != DISABLE){
     
     GPIO_SetBits(GPIOC,GPIO_Pin_13);
-    OSTimeDlyHMSM(0,0,3,0,
+    OSTimeDlyHMSM(0,0,1,500,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
@@ -671,7 +671,7 @@ uint8_t relay_1(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_2);
-   OSTimeDlyHMSM(0,0,2,0,
+   OSTimeDlyHMSM(0,0,3,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
@@ -682,7 +682,7 @@ uint8_t relay_2(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_1);
-   OSTimeDlyHMSM(0,0,2,0,
+   OSTimeDlyHMSM(0,0,3,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
@@ -693,7 +693,7 @@ uint8_t relay_3(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_0);
-   OSTimeDlyHMSM(0,0,2,0,
+   OSTimeDlyHMSM(0,0,3,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
@@ -704,7 +704,7 @@ uint8_t relay_4(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOA,GPIO_Pin_7);
-   OSTimeDlyHMSM(0,0,2,0,
+   OSTimeDlyHMSM(0,0,3,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
