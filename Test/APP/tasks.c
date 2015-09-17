@@ -993,11 +993,12 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     data_seq = local_seq;
     addSEQ();
     
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
+    *buf_frame++ = 0x00;
     *buf_frame++ = meter_type;
-    *buf_frame++ = 0x00;
-    *buf_frame++ = 0x00;
-    *buf_frame++ = 0x00;
-    *buf_frame++ = 0x00;
+    
     
     for(i=0;i<7;i++){
       *buf_frame++ = meter_addr[i];
@@ -1132,11 +1133,12 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
           addSEQ();
           
           *buf_frame++ = FN_CURRENT_METER;
-          *buf_frame++ = meter_type;
+          
           buf_frame_16 = (uint16_t *)buf_frame;
           *buf_frame_16++ = times_;    //总共多少帧
           *buf_frame_16++ = times_count;  //第几帧
           buf_frame = (uint8_t *)buf_frame_16;
+          *buf_frame++ = meter_type;
         }
         
         
@@ -1661,9 +1663,13 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
   uint8_t ip_port_[6];
   uint8_t * configflash;
   
+  uint16_t i = 0;
+  uint16_t cjq_count = 0;
   uint32_t block_cjq = 0;   //cjq block 地址
+  uint32_t block_cjq_next = 0;   //cjq block 地址删除时  先查出来下一个的地址 然后在删除
   uint32_t block_meter = 0;  //meter block 地址
   uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+  
   switch(*(buf_frame + FN_POSITION)){
   case FN_IP_PORT:
     ip1 = *(buf_frame + DATA_POSITION + 3);
@@ -1751,8 +1757,8 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
         }else{
           //有这个表  删除这个表
           delete_meter(block_cjq,block_meter);
-          device_ack(desc,server_seq_);
         }
+        device_ack(desc,server_seq_);
       }
       
       if(*(buf_frame + DATA_POSITION + 16) == 0x01){
@@ -1760,16 +1766,17 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
         if(block_meter == 0xFFFFFF){
           //没有这个表 添加
           add_meter(block_cjq,buf_frame + DATA_POSITION + 3);
-          device_ack(desc,server_seq_);
         }else{
           //有这个表 do nothing
         }
+        device_ack(desc,server_seq_);
       }
     }
     
     break;
   case FN_CJQ:
     if(*(buf_frame + DATA_POSITION) == 0xAA){
+      /*
       //删除这个采集器
       block_cjq = search_cjq(buf_frame + DATA_POSITION + 1);
       if(block_cjq == 0xFFFFFF){
@@ -1779,6 +1786,18 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
         delete_cjq(block_cjq);
         device_ack(desc,server_seq_);
       }
+      */
+      //删除全部采集器  即清空集中器中的采集器表信息
+      sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
+      sFLASH_ReadBuffer((uint8_t *)&block_cjq,sFLASH_CJQ_Q_START,3);
+      
+      for(i = 0;i < cjq_count;i++){
+        sFLASH_ReadBuffer((uint8_t *)&block_cjq_next,block_cjq+3,3);
+        
+        delete_cjq(block_cjq);
+        block_cjq = block_cjq_next;
+      }
+      device_ack(desc,server_seq_);
     }
     
     if(*(buf_frame + DATA_POSITION) == 0x55){
@@ -1786,10 +1805,10 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       if(search_cjq(buf_frame + DATA_POSITION + 1) == 0xFFFFFF){
         //添加这个采集器
         add_cjq(buf_frame + DATA_POSITION + 1);
-        device_ack(desc,server_seq_);
       }else{
         //已经有这个采集器了
       }
+      device_ack(desc,server_seq_);
     }
     break;
   case FN_MBUS:
@@ -2056,8 +2075,8 @@ uint32_t add_cjq(uint8_t * cjqaddr){
 
 uint32_t delete_cjq(uint32_t block_cjq){
   uint16_t meter_count = 0;
-  uint16_t meter_all = 0;
   uint32_t block_meter = 0;
+  uint32_t block_meter_next = 0;
   uint32_t block_after = 0;  //下一个采集器
   uint32_t block_before = 0;  //上一个采集器
   uint16_t cjq_count = 0;
@@ -2070,27 +2089,20 @@ uint32_t delete_cjq(uint32_t block_cjq){
   sFLASH_ReadBuffer((uint8_t *)&block_after,block_cjq+3,3);
   sFLASH_ReadBuffer((uint8_t *)&block_before,block_cjq+20,3);
   sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
-  sFLASH_ReadBuffer((uint8_t *)&meter_all,sFLASH_METER_COUNT,2);
   
   cjq_count--;
   
   //将这个采集器下的表Q清空  将采集器删除
   for(i = 0;i < meter_count;i++){
     
-    PutFlash(block_meter);
-    
-    sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);  //获取下一个表的block地址
+    sFLASH_ReadBuffer((uint8_t *)&block_meter_next,block_meter+3,3);  //获取下一个表的block地址
+    delete_meter(block_cjq,block_meter);
+    block_meter = block_meter_next;
   }
   //将采集器删除
   PutFlash(block_cjq);
   
   configflash = OSMemGet(&MEM_Buf,&err);
-  
-  //更新全部表数目
-  meter_all = meter_all - meter_count;
-  sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-  Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-  sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
   
   if(cjq_count == 0){
     //这个采集器是唯一的一个   block_before、block_after  都为0xFFFFFF

@@ -9,7 +9,7 @@ TriggerName=main
 LimitSize=0
 ByteLimit=50
 [DebugChecksum]
-Checksum=-418656123
+Checksum=2041797619
 [Exceptions]
 StopOnUncaught=_ 0
 StopOnThrow=_ 0
@@ -53,6 +53,8 @@ Fmt3=uint8_t[4]	4	0
 Fmt4=uint8_t[5]	4	0
 Fmt5=uint8_t[6]	4	0
 Fmt6=uint8_t[7]	4	0
+[watch_formats]
+Fmt0={W}0:test	4	0
 [Trace2]
 Enabled=0
 ShowSource=0
@@ -81,7 +83,8 @@ SumSortOrder=0
 [Disassemble mode]
 mode=0
 [Breakpoints2]
-Count=0
+Bp0=_ 1 "EMUL_CODE" "{$PROJ_DIR$\APP\main.c}.160.3" 0 0 1 "" 0 "" 0
+Count=1
 [Log file]
 LoggingEnabled=_ 0
 LogFile=_ ""
