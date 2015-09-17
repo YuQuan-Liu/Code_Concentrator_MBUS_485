@@ -139,14 +139,15 @@ void BSP_GPIO_Init(void){
   
   //GPIOA
   //GPIOA 1  M590E_POWER_CON  
-  //GPIOA 4  DELAY_4
+  //GPIOA 7  DELAY_4
   //GPIOA 8  485_CONTROL
-  //GPIOA 12  DCDC_EN   0 close the mbus power   1 open the mbus power
   //GPIOA 15  BEEP   
   
-  //GPIOA 7  Relay 485 power 
+  //GPIOA 6  Relay 485 power  realy5
+  //GPIOA 4  ON_OFF
+  //GPIOA 5  EMERGOFF  这个现在没用
   /**/
-  gpio_init.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_8 | GPIO_Pin_12 | GPIO_Pin_15 | GPIO_Pin_7;
+  gpio_init.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_15 | GPIO_Pin_6 | GPIO_Pin_4 | GPIO_Pin_5;
   gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
   gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA,&gpio_init);
@@ -154,37 +155,45 @@ void BSP_GPIO_Init(void){
   //GPIOA 15 default is JTDI
   GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
   
-  //GPIO_SetBits(GPIOA,GPIO_Pin_12);
-  GPIO_ResetBits(GPIOA,GPIO_Pin_12 | GPIO_Pin_7);
-  GPIO_ResetBits(GPIOA,GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_8 | GPIO_Pin_15);
+  GPIO_ResetBits(GPIOA,GPIO_Pin_6);
+  GPIO_ResetBits(GPIOA,GPIO_Pin_1 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_15);
   
   
   //GPIOB
+  //GPIOB 7  LED1
+  //GPIOB 9  LED2
+  //GPIOB 6  LED3
+  //GPIOB 5  LED4
   //GPIOB 0  DELAY_3
   //GPIOB 1  DELAY_2
   //GPIOB 2  DELAY_1
-  //GPIOB 3  ON_OFF
-  //GPIOB 4  EMERGOFF
-  //GPIOB 8  LED2
-  //GPIOB 9  LED3
   
-  gpio_init.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_8 | GPIO_Pin_9;
+  gpio_init.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_9;
   gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
   gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOB,&gpio_init);
   
-  GPIO_SetBits(GPIOB,GPIO_Pin_8 | GPIO_Pin_9);
-  GPIO_ResetBits(GPIOB,GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2);
+  GPIO_SetBits(GPIOB,GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_9);
   
-  //GPIOC 
-  //GPIOC  14  FEEDBACK  
-  gpio_init.GPIO_Pin = GPIO_Pin_14;
+  //GPIOC
+  //GPIOC 13  DCDC_EN   0 close the mbus power   1 open the mbus power
+  
+  gpio_init.GPIO_Pin = GPIO_Pin_13;
+  gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
+  gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOC,&gpio_init);
+  
+  GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+  
+  //GPIOA
+  //GPIOA  0  FEEDBACK  
+  gpio_init.GPIO_Pin = GPIO_Pin_0;
   gpio_init.GPIO_Mode = GPIO_Mode_IPU;
   GPIO_Init(GPIOC,&gpio_init);
-  GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource14);
+  GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource0);
   
-  /* Configure EXTI14 line */
-  exti_init.EXTI_Line = EXTI_Line14;
+  /* Configure EXTI0 line */
+  exti_init.EXTI_Line = EXTI_Line0;
   exti_init.EXTI_Mode = EXTI_Mode_Interrupt;
   exti_init.EXTI_Trigger = EXTI_Trigger_Falling;  
   exti_init.EXTI_LineCmd = ENABLE;
@@ -209,23 +218,7 @@ void BSP_USART_Init(void){
   USART_ITConfig(USART1, USART_IT_TXE, DISABLE);
   USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
   
-  /*USART2  m590e*/
-  usart_init.USART_BaudRate = 115200;
-  usart_init.USART_WordLength = USART_WordLength_8b;
-  usart_init.USART_Parity = USART_Parity_No;
-  usart_init.USART_StopBits = USART_StopBits_1;
-  usart_init.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-  usart_init.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-  
-  USART_Init(USART2, &usart_init);
-  USART_Cmd(USART2, ENABLE);
-    
-  USART_ITConfig(USART2, USART_IT_TC, DISABLE);
-  USART_ITConfig(USART2, USART_IT_TXE, DISABLE);
-  USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
-  
-  
-  /*USART3  mbus*/
+  /*USART2  mbus*/
   usart_init.USART_BaudRate = 2400;
   usart_init.USART_WordLength = USART_WordLength_9b;
   usart_init.USART_Parity = USART_Parity_Even;
@@ -233,9 +226,24 @@ void BSP_USART_Init(void){
   usart_init.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
   usart_init.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
   
+  USART_Init(USART2, &usart_init);
+  USART_Cmd(USART2, ENABLE);
+  
+  USART_ITConfig(USART2, USART_IT_TC, DISABLE);
+  USART_ITConfig(USART2, USART_IT_TXE, DISABLE);
+  USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
+  
+  /*USART3  m590e*/
+  usart_init.USART_BaudRate = 115200;
+  usart_init.USART_WordLength = USART_WordLength_8b;
+  usart_init.USART_Parity = USART_Parity_No;
+  usart_init.USART_StopBits = USART_StopBits_1;
+  usart_init.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+  usart_init.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+  
   USART_Init(USART3, &usart_init);
   USART_Cmd(USART3, ENABLE);
-  
+    
   USART_ITConfig(USART3, USART_IT_TC, DISABLE);
   USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
   USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
@@ -265,8 +273,8 @@ void BSP_NVIC_Init(void){
   nvic_init.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&nvic_init);
   
-  /* Enable the EXTI14 Interrupt */
-  nvic_init.NVIC_IRQChannel = EXTI15_10_IRQn;
+  /* Enable the EXTI0 Interrupt */
+  nvic_init.NVIC_IRQChannel = EXTI0_IRQn;
   nvic_init.NVIC_IRQChannelSubPriority = 3;
   nvic_init.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&nvic_init);

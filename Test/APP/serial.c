@@ -10,14 +10,14 @@ extern OS_SEM SEM_ServerTX;
 extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
 extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 //m590e
-void USART2_Handler(void){
+void USART3_Handler(void){
   OS_ERR err;
   uint8_t rx_byte;
   uint8_t *mem_ptr;
   
   //receive the byte
-  if(USART_GetFlagStatus(USART2,USART_FLAG_RXNE)){
-    rx_byte = USART_ReceiveData(USART2);
+  if(USART_GetFlagStatus(USART3,USART_FLAG_RXNE)){
+    rx_byte = USART_ReceiveData(USART3);
     /**/
     if(server_ptr_ != 0){
       if(server_ptr - server_ptr_ < 255){
@@ -30,10 +30,10 @@ void USART2_Handler(void){
   
   //send the data
   /**/
-  if(USART_GetFlagStatus(USART2,USART_FLAG_TC)){
+  if(USART_GetFlagStatus(USART3,USART_FLAG_TC)){
     //It must clear the TC 
     //if not it will stay here 
-    USART_ClearITPendingBit(USART2,USART_IT_TC);
+    USART_ClearITPendingBit(USART3,USART_IT_TC);
     OSSemPost(&SEM_ServerTX,
               OS_OPT_POST_1,
               &err);
@@ -87,14 +87,14 @@ void USART1_Handler(void){
 
 extern OS_SEM SEM_Slave_mbusTX;
 //mbus
-void USART3_Handler(void){
+void USART2_Handler(void){
   OS_ERR err;
   uint8_t rx_byte;
   uint8_t *mem_ptr;
   
   //receive the byte
-  if(USART_GetFlagStatus(USART3,USART_FLAG_RXNE)){
-    rx_byte = USART_ReceiveData(USART3);
+  if(USART_GetFlagStatus(USART2,USART_FLAG_RXNE)){
+    rx_byte = USART_ReceiveData(USART2);
     mem_ptr = OSMemGet(&MEM_ISR,&err);
     *mem_ptr = rx_byte;
     OSQPost((OS_Q *)&Q_Slave,
@@ -109,9 +109,9 @@ void USART3_Handler(void){
   }
   
   //send the data
-  if(USART_GetFlagStatus(USART3,USART_FLAG_TC)){
+  if(USART_GetFlagStatus(USART2,USART_FLAG_TC)){
     
-    USART_ClearITPendingBit(USART3,USART_IT_TC);
+    USART_ClearITPendingBit(USART2,USART_IT_TC);
     OSSemPost(&SEM_Slave_mbusTX,
               OS_OPT_POST_1,
               &err);
@@ -131,7 +131,7 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
   //send to mbus
   /**/
   if(slave_mbus == 0xAA){
-    USART_ITConfig(USART3,USART_IT_TC,ENABLE);
+    USART_ITConfig(USART2,USART_IT_TC,ENABLE);
     
     for(i = 0;i < count;i++){
       err = OS_ERR_NONE;
@@ -142,11 +142,11 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
                 &err);
       
       
-      USART_SendData(USART3,*(data+i));
+      USART_SendData(USART2,*(data+i));
     }
     
-    USART_ITConfig(USART3,USART_IT_TC,DISABLE);
-    while(USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET);
+    USART_ITConfig(USART2,USART_IT_TC,DISABLE);
+    while(USART_GetFlagStatus(USART2, USART_FLAG_TC) == RESET);
     
   }
   
@@ -182,7 +182,7 @@ ErrorStatus Server_Write(uint8_t * data,uint16_t count){
   CPU_TS ts;
   OS_ERR err;
   
-  USART_ITConfig(USART2,USART_IT_TC,ENABLE);
+  USART_ITConfig(USART3,USART_IT_TC,ENABLE);
   for(i = 0;i < count;i++){
     OSSemPend(&SEM_ServerTX,
               50,
@@ -192,9 +192,9 @@ ErrorStatus Server_Write(uint8_t * data,uint16_t count){
     if(err != OS_ERR_NONE){
       return ERROR;
     }
-    USART_SendData(USART2,*(data+i));
+    USART_SendData(USART3,*(data+i));
   }
-  USART_ITConfig(USART2,USART_IT_TC,DISABLE);
+  USART_ITConfig(USART3,USART_IT_TC,DISABLE);
   
   return SUCCESS;
 }
@@ -205,8 +205,8 @@ ErrorStatus Server_WriteStr(uint8_t * data){
   
   uint8_t * str = data;
   
-  USART_ITConfig(USART2,USART_IT_TC,ENABLE);
-  USART_ClearITPendingBit(USART2,USART_IT_TC);
+  USART_ITConfig(USART3,USART_IT_TC,ENABLE);
+  USART_ClearITPendingBit(USART3,USART_IT_TC);
   while(*str != '\0'){
     OSSemPend(&SEM_ServerTX,
               50,
@@ -216,11 +216,11 @@ ErrorStatus Server_WriteStr(uint8_t * data){
     if(err != OS_ERR_NONE){
       return ERROR;
     }
-    USART_SendData(USART2,*str);
+    USART_SendData(USART3,*str);
     str++;
   }
   
-  USART_ITConfig(USART2,USART_IT_TC,DISABLE);
+  USART_ITConfig(USART3,USART_IT_TC,DISABLE);
   return SUCCESS;
 }
 
@@ -258,14 +258,14 @@ ErrorStatus Device_Read(FunctionalState NewState){
 extern OS_FLAG_GRP FLAG_Event;
 void OverLoad(void){
   OS_ERR err;
-  if(EXTI_GetITStatus(EXTI_Line14) != RESET)
+  if(EXTI_GetITStatus(EXTI_Line0) != RESET)
   {
     OSFlagPost(&FLAG_Event,
                OVERLOAD,
                OS_OPT_POST_FLAG_SET,
                &err);
     
-    /* Clear the  EXTI line 9 pending bit */
-    EXTI_ClearITPendingBit(EXTI_Line14);
+    /* Clear the  EXTI line 0 pending bit */
+    EXTI_ClearITPendingBit(EXTI_Line0);
   }
 }

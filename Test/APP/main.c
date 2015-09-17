@@ -176,11 +176,11 @@ void TaskStart(void *p_arg){
     IWDG_ReloadCounter();
     
     
-    GPIO_SetBits(GPIOB,GPIO_Pin_9);
+    GPIO_SetBits(GPIOB,GPIO_Pin_7);
     OSTimeDlyHMSM(0,0,1,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
-    GPIO_ResetBits(GPIOB,GPIO_Pin_9);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_7);
     OSTimeDlyHMSM(0,0,1,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);

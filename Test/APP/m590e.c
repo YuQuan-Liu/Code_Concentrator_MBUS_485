@@ -54,60 +54,6 @@ u8 *ats[20]={
 	"AT+IPSTATUS=0\r"   //查询链路0的链路状态
 };
 
-/*
-after Enable   need wait the "+PBREADY"   received the "+PBREADY" M590E is start up
-*/
-
-ErrorStatus Device_Cmd(FunctionalState NewState){
-  OS_ERR err;
-  CPU_TS ts;
-  uint8_t cnt = 0;
-  uint8_t * buf_server = 0;
-  uint8_t * buf_server_ = 0;
-  
-  if(NewState != DISABLE){
-    buf_server = OSMemGet(&MEM_Buf,&err);
-    buf_server_ = buf_server;
-    GPIO_SetBits(GPIOB,GPIO_Pin_3);  //on_off 
-    OSTimeDlyHMSM(0,0,0,500,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-      
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    
-    GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
-    Server_Post2Buf(buf_server_);   //post to the buf
-    
-    //wait the "+PBREADY"
-    while(cnt < 250){
-      OSTimeDlyHMSM(0,0,0,100,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-      if(server_ptr - server_ptr_ > 10){
-        check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-        if(Str_Str(buf_server_,"+PBREADY\r\n")){
-          OSMemPut(&MEM_Buf,buf_server_,&err);
-          
-          Server_Post2Buf(0);
-          return SUCCESS;
-        }
-      }
-      cnt++;
-    }
-    
-    OSMemPut(&MEM_Buf,buf_server_,&err);
-    
-    Server_Post2Buf(0);
-    return ERROR;
-  }else{
-    //disable the power
-    GPIO_ResetBits(GPIOA,GPIO_Pin_1);
-    OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
-    return SUCCESS;
-  }
-}
 
 uint8_t * Send_ReadATs(uint8_t *at,uint8_t *buf_server,uint32_t timeout){
   OS_ERR err;
@@ -539,6 +485,48 @@ ErrorStatus connect(void){
   
   //tcpsend(10,"0123456789");
   return SUCCESS;
+}
+
+
+/*
+after Enable   need wait the "+PBREADY"   received the "+PBREADY" M590E is start up
+*/
+
+ErrorStatus Device_Cmd(FunctionalState NewState){
+  OS_ERR err;
+  CPU_TS ts;
+  uint8_t cnt = 0;
+  
+  if(NewState != DISABLE){
+    GPIO_SetBits(GPIOA,GPIO_Pin_4);  //on_off 
+    OSTimeDlyHMSM(0,0,0,500,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    
+    GPIO_SetBits(GPIOA,GPIO_Pin_1); //enable the power
+    
+    //wait the "+PBREADY"
+    while(cnt < 250){
+      
+      if(ate() == SUCCESS){
+        return SUCCESS;
+      }
+      
+      OSTimeDlyHMSM(0,0,0,100,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+      cnt++;
+    }
+    
+    return ERROR;
+  }else{
+    //disable the power
+    GPIO_ResetBits(GPIOA,GPIO_Pin_1);
+    OSTimeDlyHMSM(0,0,3,0,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    return SUCCESS;
+  }
 }
 
 ErrorStatus send_server(uint8_t * data,uint16_t count){

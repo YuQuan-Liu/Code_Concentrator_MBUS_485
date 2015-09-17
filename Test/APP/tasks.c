@@ -642,12 +642,13 @@ uint8_t mbus_power(FunctionalState NewState){
   /**/
   OS_ERR err;
   if(NewState != DISABLE){
-    GPIO_SetBits(GPIOA,GPIO_Pin_12);
-    OSTimeDlyHMSM(0,0,1,500,
+    
+    GPIO_SetBits(GPIOC,GPIO_Pin_13);
+    OSTimeDlyHMSM(0,0,3,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOA,GPIO_Pin_12);
+    GPIO_ResetBits(GPIOC,GPIO_Pin_13);
   }
   
 }
@@ -656,12 +657,12 @@ uint8_t relay_485(FunctionalState NewState){
   /**/
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOA,GPIO_Pin_7);
+   GPIO_SetBits(GPIOA,GPIO_Pin_6);
    OSTimeDlyHMSM(0,0,0,600,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOA,GPIO_Pin_7);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_6);
   }
   
 }
@@ -702,12 +703,12 @@ uint8_t relay_3(FunctionalState NewState){
 uint8_t relay_4(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOA,GPIO_Pin_4);
+   GPIO_SetBits(GPIOA,GPIO_Pin_7);
    OSTimeDlyHMSM(0,0,2,0,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOA,GPIO_Pin_4);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_7);
   }
 }
 
@@ -2192,20 +2193,20 @@ void Task_LED1(void *p_arg){
   
   while(DEF_TRUE){
     if(reading == 0){
-      GPIO_SetBits(GPIOB,GPIO_Pin_8);
+      GPIO_SetBits(GPIOB,GPIO_Pin_9);
       OSTimeDlyHMSM(0,0,1,0,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_8);
+      GPIO_ResetBits(GPIOB,GPIO_Pin_9);
       OSTimeDlyHMSM(0,0,1,0,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }else{
-      GPIO_SetBits(GPIOB,GPIO_Pin_8);
+      GPIO_SetBits(GPIOB,GPIO_Pin_9);
       OSTimeDlyHMSM(0,0,0,500,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_8);
+      GPIO_ResetBits(GPIOB,GPIO_Pin_9);
       OSTimeDlyHMSM(0,0,0,500,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
@@ -2767,7 +2768,7 @@ void Task_OverLoad(void *p_arg){
       //enable the beep
       GPIO_SetBits(GPIOA,GPIO_Pin_15);
       //disable the mbus power
-      GPIO_ResetBits(GPIOA,GPIO_Pin_12);
+      GPIO_ResetBits(GPIOC,GPIO_Pin_13);
     }
     
   }
