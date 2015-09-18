@@ -189,7 +189,7 @@ void BSP_GPIO_Init(void){
   //GPIOA  0  FEEDBACK  
   gpio_init.GPIO_Pin = GPIO_Pin_0;
   gpio_init.GPIO_Mode = GPIO_Mode_IPU;
-  GPIO_Init(GPIOC,&gpio_init);
+  GPIO_Init(GPIOA,&gpio_init);
   GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource0);
   
   /* Configure EXTI0 line */

@@ -2764,11 +2764,23 @@ void Task_OverLoad(void *p_arg){
     OSTimeDlyHMSM(0,0,0,200,
                   OS_OPT_TIME_HMSM_STRICT,
                   &err);
-    if(!GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_14)){
+    if(!GPIO_ReadInputDataBit(GPIOA,GPIO_Pin_0)){
       //enable the beep
       GPIO_SetBits(GPIOA,GPIO_Pin_15);
       //disable the mbus power
       GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+      //Light the LED3
+      
+      while(DEF_TRUE){
+        GPIO_SetBits(GPIOB,GPIO_Pin_6);
+        OSTimeDlyHMSM(0,0,0,100,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+        GPIO_ResetBits(GPIOB,GPIO_Pin_6);
+        OSTimeDlyHMSM(0,0,0,100,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
     }
     
   }
