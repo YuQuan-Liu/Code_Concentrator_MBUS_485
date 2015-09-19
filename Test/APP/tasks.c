@@ -93,6 +93,7 @@ void Task_Slave(void *p_arg){
         }else{
           //do nothing
         }
+        
       }else{
         *buf++ = data;
         if((buf-buf_) == 11){
@@ -754,6 +755,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   Device_Read(ENABLE);
   if(Mem_Cmp(buf_frame+16,"\xFF\xFF\xFF\xFF\xFF\xFF\xFF",7) == DEF_YES){
     //抄全部表
+    /**/
     for(i = 0;i < cjq_count;i++){
       sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
       sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
@@ -782,7 +784,6 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
         
         meter_read_single(meter_addr,block_meter,meter_type,desc);
-        
         sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
       }
       
@@ -919,6 +920,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       sFLASH_EraseWritePage(configflash,block_meter,256);
     }
     OSMemPut(&MEM_Buf,configflash,&err);
+    
 }
 
 //all = 1 发送全部表  all = 0 发送表块对应的表
@@ -1031,7 +1033,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
       }
     }else{
       //to 485
-      Slave_Write(buf_frame_,36);
+      Server_Write_485(buf_frame_,36);
     }
   }else{
     //全部表
@@ -1178,7 +1180,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
             }
           }else{
             //to 485
-            Slave_Write(buf_frame_,17+14*meter_count_+5);
+            Server_Write_485(buf_frame_,17+14*meter_count_+5);
           }
           
           buf_frame = buf_frame_;
@@ -1310,6 +1312,7 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
           relay_4(ENABLE);
           break;
       }
+      
       return 1;
     }else{
       //485 ~~~
@@ -2193,21 +2196,21 @@ void Task_LED1(void *p_arg){
   
   while(DEF_TRUE){
     if(reading == 0){
-      GPIO_SetBits(GPIOB,GPIO_Pin_9);
+      GPIO_SetBits(GPIOB,GPIO_Pin_6);
       OSTimeDlyHMSM(0,0,1,0,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_9);
+      GPIO_ResetBits(GPIOB,GPIO_Pin_6);
       OSTimeDlyHMSM(0,0,1,0,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }else{
-      GPIO_SetBits(GPIOB,GPIO_Pin_9);
-      OSTimeDlyHMSM(0,0,0,500,
+      GPIO_SetBits(GPIOB,GPIO_Pin_6);
+      OSTimeDlyHMSM(0,0,0,300,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_9);
-      OSTimeDlyHMSM(0,0,0,500,
+      GPIO_ResetBits(GPIOB,GPIO_Pin_6);
+      OSTimeDlyHMSM(0,0,0,300,
                     OS_OPT_TIME_HMSM_STRICT,
                     &err);
     }
@@ -2246,7 +2249,7 @@ void device_ack(uint8_t desc,uint8_t server_seq_){
     send_server(ack,17);
   }else{
     //to 485
-    Slave_Write(ack,17);
+    Server_Write_485(ack,17);
   }
   
 }
@@ -2283,7 +2286,7 @@ void device_nack(uint8_t desc,uint8_t server_seq_){
     send_server(nack,17);
   }else{
     //to 485
-    Slave_Write(nack,17);
+    Server_Write_485(nack,17);
   }
   
 }
@@ -2344,7 +2347,7 @@ void ack_query_cjq(uint8_t desc,uint8_t server_seq_){
     send_server(buf_frame_,17+cjq_count*6);
   }else{
     //to 485
-    Slave_Write(buf_frame_,17+cjq_count*6);
+    Server_Write_485(buf_frame_,17+cjq_count*6);
   }
   
   OSMemPut(&MEM_Buf,buf_frame_,&err);
@@ -2521,7 +2524,7 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t 
             send_server(buf_frame_,17+17*meter_count_+1);
           }else{
             //to 485
-            Slave_Write(buf_frame_,17+17*meter_count_+1);
+            Server_Write_485(buf_frame_,17+17*meter_count_+1);
           }
           
           buf_frame = buf_frame_;
@@ -2592,7 +2595,7 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t 
         send_server(buf_frame_,35);
       }else{
         //to 485
-        Slave_Write(buf_frame_,35);
+        Server_Write_485(buf_frame_,35);
       }
     }
   }
@@ -2639,7 +2642,7 @@ void ack_query_addr(uint8_t desc,uint8_t server_seq_){
     send_server(buf_frame_,17);
   }else{
     //to 485
-    Slave_Write(buf_frame_,17);
+    Server_Write_485(buf_frame_,17);
   }
   
   OSMemPut(&MEM_Buf,buf_frame_,&err);
@@ -2693,7 +2696,7 @@ void ack_query_ip(uint8_t desc,uint8_t server_seq_){
     send_server(buf_frame_,23);
   }else{
     //to 485
-    Slave_Write(buf_frame_,23);
+    Server_Write_485(buf_frame_,23);
   }
   
   OSMemPut(&MEM_Buf,buf_frame_,&err);
@@ -2740,7 +2743,7 @@ void ack_query_mbus(uint8_t desc,uint8_t server_seq_){
     send_server(buf_frame_,18);
   }else{
     //to 485
-    Slave_Write(buf_frame_,18);
+    Server_Write_485(buf_frame_,18);
   }
   
   OSMemPut(&MEM_Buf,buf_frame_,&err);
@@ -2772,11 +2775,11 @@ void Task_OverLoad(void *p_arg){
       //Light the LED3
       
       while(DEF_TRUE){
-        GPIO_SetBits(GPIOB,GPIO_Pin_6);
+        GPIO_SetBits(GPIOB,GPIO_Pin_9);
         OSTimeDlyHMSM(0,0,0,100,
                       OS_OPT_TIME_HMSM_STRICT,
                       &err);
-        GPIO_ResetBits(GPIOB,GPIO_Pin_6);
+        GPIO_ResetBits(GPIOB,GPIO_Pin_9);
         OSTimeDlyHMSM(0,0,0,100,
                       OS_OPT_TIME_HMSM_STRICT,
                       &err);

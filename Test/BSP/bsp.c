@@ -162,8 +162,8 @@ void BSP_GPIO_Init(void){
   //GPIOB
   //GPIOB 7  LED1
   //GPIOB 9  LED2
-  //GPIOB 6  LED3
-  //GPIOB 5  LED4
+  //GPIOB 6  LED3   指示2  抄表
+  //GPIOB 5  LED4   指示1  待定
   //GPIOB 0  DELAY_3
   //GPIOB 1  DELAY_2
   //GPIOB 2  DELAY_1

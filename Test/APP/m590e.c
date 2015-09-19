@@ -25,10 +25,10 @@ extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 uint8_t apn[10] = "CMNET\r";                    //其中APN的最后必须是\r\0
 uint8_t username[10] = "\"gsm\",";              //apn 的用户名必须为由双引号包围加上分割的，
 uint8_t password[10] = "\"1234\"\r";            //apn 的用户名必须为由双引号包围加上结束符\r
-//uint8_t dns[25] = "\"www.xcxdtech.com\"\r";     //the server 
-uint8_t dns[25] = "\"avenger0422.vicp.cc\"\r";     //the server 
+uint8_t dns[25] = "\"www.xcxdtech.com\"\r";     //the server 
+//uint8_t dns[25] = "\"avenger0422.vicp.cc\"\r";     //the server 
 uint8_t ip[17] = "218.28.41.74";                 //the server ip
-uint8_t port[8] = ",5555\r";                     //the server port
+uint8_t port[8] = ",3333\r";                     //the server port
 uint8_t deviceaddr[5] = {0x00,0x00,0x00,0x00,0x00};      //设备地址
 
 uint8_t ip1 = 74;
@@ -51,7 +51,8 @@ u8 *ats[20]={
 	"AT+DNS=",   //DNS获取IP
 	"AT+TCPSETUP=0,",   //+ip+port 建立TCP连接
 	"AT+TCPSEND=0,",    //在链路0 上发送数据
-	"AT+IPSTATUS=0\r"   //查询链路0的链路状态
+	"AT+IPSTATUS=0\r",   //查询链路0的链路状态
+        "AT+SIGNAL=2\r"
 };
 
 
@@ -79,7 +80,35 @@ void check_str(uint8_t * start,uint8_t * end){
 }
 
 ErrorStatus at(void){
+
+}
+
+ErrorStatus at_signal(void){
+  uint8_t i;
+  OS_ERR err;
   
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 3;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+    }
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[15],buf_server_,100);
+    check_str(buf_server_,buf_server);    //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 
@@ -441,6 +470,7 @@ ErrorStatus connect(void){
   if(ate() == ERROR){
     return ERROR;
   }
+  at_signal();  //设置信号灯显示
   if(at_ccid() == ERROR){
     return ERROR;
   }

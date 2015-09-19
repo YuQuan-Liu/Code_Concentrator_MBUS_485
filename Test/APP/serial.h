@@ -9,8 +9,9 @@ void USART2_Handler(void);
 void USART3_Handler(void);
 
 ErrorStatus Slave_Write(uint8_t * data,uint16_t count);
-ErrorStatus Server_Write(uint8_t * data,uint16_t count);
-ErrorStatus Server_WriteStr(uint8_t * data);
+ErrorStatus Server_Write_485(uint8_t * data,uint16_t count);  //to 485
+ErrorStatus Server_Write(uint8_t * data,uint16_t count);  //to m590e
+ErrorStatus Server_WriteStr(uint8_t * data);  //to m590e
 
 /**
 ptr == 0  中断中不放到buf中

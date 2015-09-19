@@ -148,8 +148,39 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
     USART_ITConfig(USART2,USART_IT_TC,DISABLE);
     while(USART_GetFlagStatus(USART2, USART_FLAG_TC) == RESET);
     
+  }else{
+    //send to 485
+    GPIO_SetBits(GPIOA,GPIO_Pin_8);
+    USART_ITConfig(USART1,USART_IT_TC,ENABLE);
+    
+    for(i = 0;i < count;i++){
+      err = OS_ERR_NONE;
+      OSSemPend(&SEM_Slave_485TX,
+                500,
+                OS_OPT_PEND_BLOCKING,
+                &ts,
+                &err);
+      
+      USART_SendData(USART1,*(data+i));
+    }
+    
+    
+    USART_ITConfig(USART1,USART_IT_TC,DISABLE);
+    while(USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+    /*
+    OSTimeDlyHMSM(0,0,0,50,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+    */
+    GPIO_ResetBits(GPIOA,GPIO_Pin_8);
   }
-  
+  return SUCCESS;
+}
+
+ErrorStatus Server_Write_485(uint8_t * data,uint16_t count){
+  uint16_t i;
+  CPU_TS ts;
+  OS_ERR err;
   //send to 485
   GPIO_SetBits(GPIOA,GPIO_Pin_8);
   USART_ITConfig(USART1,USART_IT_TC,ENABLE);
@@ -174,6 +205,7 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
                     &err);
   */
   GPIO_ResetBits(GPIOA,GPIO_Pin_8);
+  
   return SUCCESS;
 }
 
