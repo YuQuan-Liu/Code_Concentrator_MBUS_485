@@ -7,17 +7,20 @@
 #define USE_DNS          //使用DNS获取IP地址   
 
 
-/*使用模块为SIM800G
+/*使用模块为SIM800G*/
 #define SIM800G
 #define TEST_DNS "\"avenger0422.vicp.cc\""
 #define REAL_DNS "\"www.xcxdtech.com\""
-*/
-/*使用模块为M590E*/
+
+/*使用模块为M590E
 #define M590E
 #define TEST_DNS "\"avenger0422.vicp.cc\"\r"
 #define REAL_DNS "\"www.xcxdtech.com\"\r"
+*/
 
-
+/******************************************************
+集中器的地址   配置过之后使用配置过的  未配置过使用默认的5700000999
+*/
 
 ErrorStatus send_server(uint8_t * data,uint16_t count);
 

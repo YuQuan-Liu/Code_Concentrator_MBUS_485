@@ -18,6 +18,7 @@ uint32_t delete_meter(uint32_t block_cjq,uint32_t block_meter);
 void param_query(uint8_t * buf_frame,uint8_t desc);
 
 void ack_query_mbus(uint8_t desc,uint8_t server_seq_);
+void ack_query_test(uint8_t desc,uint8_t server_seq_);
 void ack_query_cjq(uint8_t desc,uint8_t server_seq_);
 void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t server_seq_);
 void ack_query_addr(uint8_t desc,uint8_t server_seq_);

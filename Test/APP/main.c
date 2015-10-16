@@ -92,7 +92,7 @@ volatile uint8_t connectstate = 0;       //0 didn't connect to the server   1 co
 volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
 
 uint8_t slave_mbus = 0xff; //0xaa mbus   0xff  485
-
+uint8_t device_test = 0xFF; //0x00~≤‚ ‘π˝¡À~www.xcxdtech.com   0xFF~Œ¥≤‚ ‘~avenger0422.vicp.cc
 void TaskStart(void *p_arg);
 void TaskCreate(void);
 void ObjCreate(void);

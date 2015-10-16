@@ -4,6 +4,7 @@
 #include "spi_flash.h"
 #include "stm32f10x_conf.h"
 #include "os.h"
+#include "gprs.h"
 
 /**
   * @brief  Erases the specified FLASH sector.
@@ -621,9 +622,6 @@ void PutFlash(uint32_t put){
 }
 
 
-extern uint8_t apn[10];                    //其中APN的最后必须是\r\0
-extern uint8_t username[10];              //apn 的用户名必须为由双引号包围加上分割的，
-extern uint8_t password[10];            //apn 的用户名必须为由双引号包围加上结束符\r
 //uint8_t dns[25] = "\"www.xcxdtech.com\"\r";     //the server 
 extern uint8_t dns[25];     //the server 
 extern uint8_t ip[17];                 //the server ip
@@ -637,31 +635,15 @@ extern uint8_t ip4;
 extern uint16_t port_;
 
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
+extern uint8_t device_test; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~avenger0422.vicp.cc
 
 void param_conf(void){
   
   uint8_t temp[2] = {0x00,0x00};
-  sFLASH_ReadBuffer(temp,sFLASH_CON_APN,1);
-  if(temp[0] != 0xFF){
-    sFLASH_ReadStr(apn,sFLASH_CON_APN,10);
-  }
   
-  temp[0] = 0x00;
-  sFLASH_ReadBuffer(temp,sFLASH_CON_USER,1);
-  if(temp[0] != 0xFF){
-    sFLASH_ReadStr(username,sFLASH_CON_USER,10);
-  }
-  
-  temp[0] = 0x00;
-  sFLASH_ReadBuffer(temp,sFLASH_CON_PASSWORD,1);
-  if(temp[0] != 0xFF){
-    sFLASH_ReadStr(password,sFLASH_CON_PASSWORD,10);
-  }
-  
-  temp[0] = 0x00;
-  sFLASH_ReadBuffer(temp,sFLASH_CON_WEB,1);
-  if(temp[0] != 0xFF){
-    sFLASH_ReadStr(dns,sFLASH_CON_WEB,25);
+  sFLASH_ReadBuffer(&device_test,sFLASH_CON_WEB,1);
+  if(device_test == 0xFF){
+    Mem_Copy(dns,TEST_DNS,25);
   }
   
   temp[0] = 0x00;
@@ -683,5 +665,9 @@ void param_conf(void){
   //the type of the slave
   sFLASH_ReadBuffer((uint8_t *)&slave_mbus,sFLASH_METER_MBUS,1);
   //the device 's addr
-  sFLASH_ReadBuffer(deviceaddr,sFLASH_DEVICE_ADDR,5);
+  temp[0] = 0x00;
+  sFLASH_ReadBuffer(temp,sFLASH_DEVICE_ADDR,1);
+  if(temp[0] != 0xFF){
+    sFLASH_ReadBuffer(deviceaddr,sFLASH_DEVICE_ADDR,5);
+  }
 }

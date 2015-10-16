@@ -294,7 +294,7 @@ void Task_Server(void *p_arg){
           continue;
         }
         
-        if(Str_Str(buf_server_task_,"+TCPRECV:0")){
+        if(Str_Str(buf_server_task_,"RECEIVE")){
           //oh it's the data 
           OSQPost(&Q_Deal,
                   buf_server_task_,
@@ -306,43 +306,20 @@ void Task_Server(void *p_arg){
           continue;
         }
         
-        if(Str_Str(buf_server_task_,"+TCPSEND:0,")){
-          
-          buf_server_task = buf_server_task_;
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          Server_Post2Buf(buf_server_task_);
-          
-          OSSemPost(&SEM_SendOver,
-                    OS_OPT_POST_1,
-                    &err);
-          continue;
-        }
-        
-        if(Str_Str(buf_server_task_,"PBREADY")){
-          
-          buf_server_task = buf_server_task_;
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          
-          buf_server_task = 0;
-          buf_server_task_ = 0;
-          Server_Post2Buf(0);
-          change_connect(0);
-          continue;
-        }
-        //SOCKETS: IPR STOPPED
-        if(Str_Str(buf_server_task_,"STOPPED")){
-          
-          buf_server_task = buf_server_task_;
-          Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          
-          buf_server_task = 0;
-          buf_server_task_ = 0;
-          Server_Post2Buf(0);
-          change_connect(0);
-          continue;
-        }
-        //+TCPCLOSE:0,Link Closed
+        //CLOSED
         if(Str_Str(buf_server_task_,"CLOSE")){
+          
+          buf_server_task = buf_server_task_;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          
+          buf_server_task = 0;
+          buf_server_task_ = 0;
+          Server_Post2Buf(0);
+          change_connect(0);
+          continue;
+        }
+        //+PDP: DEACT\r\n
+        if(Str_Str(buf_server_task_,"DEACT")){
           
           buf_server_task = buf_server_task_;
           Mem_Set(buf_server_task_,0x00,256); //clear the buf
@@ -420,7 +397,7 @@ void Task_DealServer(void *p_arg){
             &ts,
             &err);
     
-    start = Str_Str(buf_ptr_,",\x68") + 1;
+    start = Str_Str(buf_ptr_,"\r\n\x68") + 2;
     
     //check the frame
     len = check_frame(start);
@@ -1661,6 +1638,7 @@ extern uint8_t ip2;
 extern uint8_t ip3;
 extern uint8_t ip4;
 extern uint16_t port_;
+extern uint8_t device_test; //0x00~≤‚ ‘π˝¡À~www.xcxdtech.com   0xFF~Œ¥≤‚ ‘~avenger0422.vicp.cc
 
 void param_config(uint8_t * buf_frame,uint8_t desc){
   OS_ERR err;
@@ -1830,6 +1808,27 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
     Mem_Copy(configflash + (sFLASH_METER_MBUS - sFLASH_CON_START_ADDR),&slave_mbus,1);
+    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+    
+    OSMemPut(&MEM_Buf,configflash,&err);
+    
+    device_ack(desc,server_seq_);
+    break;
+  case FN_TEST:
+    if(*(buf_frame + DATA_POSITION) == 0x00){
+      //go to www.xcxdtech.com
+      device_test = 0x00;
+    }
+    
+    if(*(buf_frame + DATA_POSITION) == 0xFF){
+      //go to avenger0422.vicp.cc
+      device_test = 0xFF;
+    }
+    
+    configflash = OSMemGet(&MEM_Buf,&err);
+    
+    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(configflash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&slave_mbus,1);
     sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
     
     OSMemPut(&MEM_Buf,configflash,&err);
@@ -2180,6 +2179,9 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_MBUS:
     ack_query_mbus(desc,server_seq_);
+    break;
+  case FN_TEST:
+    ack_query_test(desc,server_seq_);
     break;
   }
 }
@@ -2749,6 +2751,54 @@ void ack_query_mbus(uint8_t desc,uint8_t server_seq_){
   OSMemPut(&MEM_Buf,buf_frame_,&err);
   
 }
+
+void ack_query_test(uint8_t desc,uint8_t server_seq_){
+  OS_ERR err;
+  uint8_t * buf_frame = 0;
+  uint8_t * buf_frame_ = 0;
+  uint16_t * buf_frame_16 = 0;
+  
+  buf_frame = OSMemGet(&MEM_Buf,&err);
+  if(buf_frame == 0){
+    return;
+  }
+  buf_frame_ = buf_frame;
+  *buf_frame++ = FRAME_HEAD;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = FRAME_HEAD;
+  
+  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+  /**/
+  *buf_frame++ = deviceaddr[0];
+  *buf_frame++ = deviceaddr[1];
+  *buf_frame++ = deviceaddr[2];
+  *buf_frame++ = deviceaddr[3];
+  *buf_frame++ = deviceaddr[4];
+  
+  *buf_frame++ = AFN_QUERY;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
+  *buf_frame++ = FN_TEST;
+  
+  *buf_frame++ = device_test;
+  *buf_frame++ = check_cs(buf_frame_+6,10);
+  *buf_frame++ = FRAME_END;
+  
+  
+  if(desc){
+    //to m590e
+    send_server(buf_frame_,18);
+  }else{
+    //to 485
+    Server_Write_485(buf_frame_,18);
+  }
+  
+  OSMemPut(&MEM_Buf,buf_frame_,&err);
+  
+}
+
 
 extern OS_FLAG_GRP FLAG_Event;
 void Task_OverLoad(void *p_arg){

@@ -67,6 +67,7 @@
 #define FN_METER                        6
 #define FN_CJQ                          7
 #define FN_MBUS                         12  //底层表的类型   是否打开MBUS部分  发送信息
+#define FN_TEST                         13  //连接那个域名   sFLASH_CON_WEB ==0xFF~avenger0422.vicp.cc    !=0xFF~www.xcxdtech.com
 
 //Fn  AFN == 0x04
 #define FN_CLOSE                      2

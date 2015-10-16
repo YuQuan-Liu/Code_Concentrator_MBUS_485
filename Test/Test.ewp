@@ -1910,9 +1910,6 @@
       <name>$PROJ_DIR$\APP\includes.h</name>
     </file>
     <file>
-      <name>$PROJ_DIR$\APP\m590e.c</name>
-    </file>
-    <file>
       <name>$PROJ_DIR$\APP\main.c</name>
     </file>
     <file>
@@ -1920,6 +1917,9 @@
     </file>
     <file>
       <name>$PROJ_DIR$\APP\serial.h</name>
+    </file>
+    <file>
+      <name>$PROJ_DIR$\APP\sim800g.c</name>
     </file>
     <file>
       <name>$PROJ_DIR$\APP\spi_flash.c</name>

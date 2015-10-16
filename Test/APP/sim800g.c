@@ -1,21 +1,36 @@
-
-
+#include "stm32f10x_conf.h"
+#include "serial.h"
+#include "os.h"
+#include "lib_str.h"
 #include "gprs.h"
-#include "bsp.h"
-
-#include "atom.h"
-#include "atomsem.h"
-#include "atommem.h"
-#include "atommutex.h"
-#include "atomqueue.h"
-#include "string.h"
+#include "spi_flash.h"
 #include "stdlib.h"
-#include "frame.h"
-#include "function.h"
 
 /**/
 //#define _AT_DNS
 
+extern OS_MEM MEM_Buf;
+extern OS_MEM MEM_ISR;
+
+extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
+extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
+extern OS_SEM SEM_Send_Online;   //发送数据时检测链路状态  "+IPSTATUS:0,CONNECT,TCP"
+
+
+extern volatile uint8_t connectstate;
+extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
+extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
+
+uint8_t dns[25] = "\"www.xcxdtech.com\"";     //the server 
+uint8_t ip[17] = "218.28.41.74";                 //the server ip
+uint8_t port[8] = ",3333\r";                     //the server port
+uint8_t deviceaddr[5] = {0x99,0x09,0x00,0x00,0x57};      //设备地址
+
+uint8_t ip1 = 74;
+uint8_t ip2 = 41;
+uint8_t ip3 = 28;
+uint8_t ip4 = 218;
+uint16_t port_ = 3333;
 
 u8 *ats[20]={
 	"AT\r",
@@ -32,65 +47,53 @@ u8 *ats[20]={
 	"AT+CIPSEND=0,",    //在链路0 上发送数据
 };
 
-uint8_t dns[25] = "\"www.xcxdtech.com\"";     //the server 
-uint8_t ip[17] = "218.28.41.74";                 //the server ip
-uint8_t port[10] = ",\"3333\"\r";                     //the server port
-uint8_t deviceaddr[5] = {0x99,0x09,0x00,0x00,0x57}; //设备地址 standard
-uint8_t telnum[12] = "15700000999";		//the addr of the gprs
 
-extern ATOM_SEM sem_send;
-extern ATOM_SEM sem_ack;
-extern ATOM_SEM sem_sendresult;
+uint8_t * Send_ReadATs(uint8_t *at,uint8_t *buf_server,uint32_t timeout){
+  OS_ERR err;
+  CPU_TS ts;
+  
+  Server_WriteStr(at);
+  Server_Post2Buf(buf_server);  //接收数据到buf_server
+  OSTimeDly(timeout,
+             OS_OPT_TIME_DLY,
+             &err);
+  buf_server = server_ptr;
+  
+  Server_Post2Buf(0);   //停止接收数据
+  return buf_server;
+}
 
-extern ATOM_QUEUE server_q;  //receive the data with in \r\n**data**\r\n
-
-extern ATOM_MEM mem_u1;
-
-
-extern u8 Online;
-extern u8 meterdata[600];
-extern u8 send_server_result; //根据返回的SEND OK SEND FAIL 设置
-extern u8 local_seq;  //本地的序列号
-
+void check_str(uint8_t * start,uint8_t * end){
+  uint8_t * s;
+  s = start;
+  while(*s == 0x00 && s < end){
+    *s++ = '\r';
+  }
+}
 
 ErrorStatus ate_(void){
-	u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    memset(rcv_ptr,0x00,100);
-    u1_send(ats[1],strlen(ats[1]));
-    u1putbuf(rcv_ptr);
-    atomTimerDelay(100);
-    u1_check();
-    if(strstr((u8 *)rcv_ptr,"OK") > 0){
-      ret = SUCCESS;
-    }
-    u1putbuf(0);
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  Mem_Set(buf_server_,0x00,256); //clear the buf
+  buf_server = Send_ReadATs(ats[1],buf_server_,100);
+  check_str(buf_server_,buf_server);    //屏蔽掉数据前的0x00
+  if(Str_Str(buf_server_,"OK")){
+    OSMemPut(&MEM_Buf,buf_server_,&err);
+    return SUCCESS;
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 ErrorStatus at(void){
-	u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    memset(rcv_ptr,0x00,100);
-    u1_send(ats[0],strlen(ats[0]));
-    u1putbuf(rcv_ptr);
-    atomTimerDelay(100);
-    u1_check();
-    if(strstr((u8 *)rcv_ptr,"OK") > 0){
-      ret = SUCCESS;
-    }
-    u1putbuf(0);
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;    
+  
 }
 
 
@@ -98,313 +101,311 @@ ErrorStatus at(void){
 检查SIM卡状态
 */
 ErrorStatus at_cpin(void){
-	u8 i = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    
-    for(i = 0;i < 100;i++){
-      
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[2],strlen(ats[2]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(100);
-      u1_check();
-	  //the content +CPIN: READY
-      if(strstr((u8 *)rcv_ptr,"READY") > 0){
-        ret = SUCCESS;
-        break;
-      }
-      u1putbuf(0);
-      atomTimerDelay(300);
-      
+  uint8_t i;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
     }
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
-    
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[2],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    //the content +CPIN: READY
+    if(Str_Str(buf_server_,"READY")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
     
 }
 
 
-ErrorStatus at_csq(void){	
-	u8 i = 0;
-    u8 good = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    u8 *rssi_ptr = 0;
-    u8 rssi = 0;
-    u8 *ber_ptr = 0;
-    u8 ber = 0;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    
-    for(i = 0;i < 200;i++){
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[3],strlen(ats[3]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(100);
-      u1_check();
-      if(strstr(rcv_ptr,"CSQ") > 0){
-        rssi_ptr = strchr(rcv_ptr,':')+2;
-        rssi = atoi(rssi_ptr);
-        ber_ptr = strchr(rcv_ptr,',')+1;
-        ber = atoi(ber_ptr);
-        //if(rssi > 5 && ber != 99){
-        if(rssi > 5){
-          good++;
-          if(good > 6){
-            ret = SUCCESS;
-            break;
-          }
-        }else{
-          good = 0;
+ErrorStatus at_csq(void){
+  uint8_t i;
+  OS_ERR err;
+  uint8_t good = 0;
+  
+  uint8_t *rssi_ptr = 0;
+  uint8_t rssi = 0;
+  uint8_t *ber_ptr = 0;
+  uint8_t ber = 0;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
+    }
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[3],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"CSQ")){
+      rssi_ptr = Str_Char_N(buf_server_,256,':')+2;
+      rssi = atoi(rssi_ptr);
+      ber_ptr = Str_Char_N(buf_server_,256,',')+1;
+      ber = atoi(ber_ptr);
+      if(rssi > 5 && ber != 99){
+        good++;
+        if(good > 6){
+          OSMemPut(&MEM_Buf,buf_server_,&err);
+          return SUCCESS;
         }
       }else{
         good = 0;
       }
-      u1putbuf(0);
-      atomTimerDelay(300);
+    }else{
+      good = 0;
     }
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 
 ErrorStatus at_creg(void){
-	u8 i = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    for(i = 0;i < 100;i++){
-      
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[4],strlen(ats[4]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(100);
-      u1_check();
-      if(strstr(rcv_ptr,"+CREG: 0,1") > 0 || strstr(rcv_ptr,"+CREG: 0,5") > 0){
-        ret = SUCCESS;
-        break;
-      }
-      u1putbuf(0);
-      atomTimerDelay(300);
-      
+  uint8_t i;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
     }
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
-    
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[4],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"+CREG: 0,1") || Str_Str(buf_server_,"+CREG: 0,5")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 
 ErrorStatus check_cgatt(void){
-	u8 i = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    for(i = 0;i < 100;i++){
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[5],strlen(ats[5]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(100);
-      u1_check();
-      if(strstr(rcv_ptr,"+CGATT: 1") > 0){
-        ret = SUCCESS;
-        break;
-      }
-      u1putbuf(0);
-      atomTimerDelay(300);
-      
+  uint8_t i;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
     }
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[5],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"+CGATT: 1")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 //多链路模式
 ErrorStatus at_cipmux(void){
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    memset(rcv_ptr,0x00,100);
-    
-    u1_send(ats[6],strlen(ats[6]));
-    u1putbuf(rcv_ptr);
-    atomTimerDelay(100);
-    u1_check();
-    if(strstr(rcv_ptr,"OK") > 0){
-      ret = SUCCESS;
-    }
-    u1putbuf(0);
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
-    
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  Mem_Set(buf_server_,0x00,256); //clear the buf
+  buf_server = Send_ReadATs(ats[6],buf_server_,100);
+  check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+  if(Str_Str(buf_server_,"OK")){
+    OSMemPut(&MEM_Buf,buf_server_,&err);
+    return SUCCESS;
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 ErrorStatus at_apn(void){
-    u8 ret = ERROR;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    memset(rcv_ptr,0x00,100);
-    
-    u1_send(ats[7],strlen(ats[7]));
-    u1putbuf(rcv_ptr);
-    atomTimerDelay(100);
-    u1_check();
-    if(strstr(rcv_ptr,"OK") > 0){
-      ret = SUCCESS;
-    }
-    u1putbuf(0);
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  Mem_Set(buf_server_,0x00,256); //clear the buf
+  buf_server = Send_ReadATs(ats[7],buf_server_,100);
+  check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+  if(Str_Str(buf_server_,"OK")){
+    OSMemPut(&MEM_Buf,buf_server_,&err);
+    return SUCCESS;
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 
 
 ErrorStatus at_xiic(void){
-	u8 i = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    for(i = 0;i < 100;i++){
-      
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[8],strlen(ats[8]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(2000);
-      u1_check();
-      if(strstr(rcv_ptr,"OK") > 0){
-        ret = SUCCESS;
-        break;
-      }
-      u1putbuf(0);
-      atomTimerDelay(300);
-      
+  uint8_t i;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[8],buf_server_,2000);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
     }
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 
 ErrorStatus check_xiic(void){
-	u8 i = 0;
-    u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
-    u8 *ip1_ptr = 0;
-    u8 ip1 = 0;
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    for(i = 0;i < 100;i++){
-      
-      memset(rcv_ptr,0x00,100);
-    
-      u1_send(ats[9],strlen(ats[9]));
-      u1putbuf(rcv_ptr);
-      atomTimerDelay(100);
-      u1_check();
-      if(strstr((u8 *)rcv_ptr,".") > 0){
-        ret = SUCCESS;
-        break;
-      }
-      u1putbuf(0);
-      atomTimerDelay(300);
-      
+  uint8_t i;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+  for(i = 0;i < 100;i++){
+    if(i != 0){
+      OSTimeDlyHMSM(0,0,0,200,
+                    OS_OPT_TIME_HMSM_STRICT,
+                    &err);
     }
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[9],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,".")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
+  }
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
 }
 
 ErrorStatus at_tcpsetup(void){
-	u8 *rcv_ptr = 0;
-    u8 err = 0;
-    u8 ret = ERROR;
+  OS_ERR err;
+  
+  uint8_t * buf_server = 0;
+  uint8_t * buf_server_ = 0;
+  
+  buf_server = OSMemGet(&MEM_Buf,&err);
+  buf_server_ = buf_server;
+  
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    Server_WriteStr(ats[10]);
+    Server_WriteStr(dns);
+    Server_WriteStr(port);
     
-    rcv_ptr = atomMemGet(&mem_u1,&err);
-    memset(rcv_ptr,0x00,100);
+    Server_Post2Buf(buf_server);  //接收数据到buf_server
+    OSTimeDly(3000,
+               OS_OPT_TIME_DLY,
+               &err);
+    buf_server = server_ptr;
+    Server_Post2Buf(0);   //停止接收数据
     
-    //for(i = 0;i < 20;i++){
-    u1_send(ats[10],strlen(ats[10]));
-    u1_send(dns,strlen(dns));
-    u1_send(port,strlen(port));
-    
-    u1putbuf(rcv_ptr);
-    atomTimerDelay(3000);
-    u1_check();
-    if(strstr(rcv_ptr,"CONNECT OK") > 0){
-      ret = SUCCESS;
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"CONNECT OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
     }
-    u1putbuf(0);
-    
-    atomMemPut(&mem_u1,rcv_ptr,&err);
-    return ret;
+  OSMemPut(&MEM_Buf,buf_server_,&err);
+  return ERROR;
     
 }
 
 /*
 the send is the pointer to the data 
 the count is the number of the data
-the '\r' will send after the data is all send
-
-after this function tim3_timing(500) to receive the data from the m590e(+TCPSEND:0)
 */
-extern ATOM_MUTEX sendserver_mutex;
 ErrorStatus send_server(uint8_t * send,uint16_t count){
-    u8 at_len = 0;
-    u8 sendcount[5];
-    u8 ret = 0;
-    u8 sem_ret = 0;
-	
-    atomMutexGet(&sendserver_mutex, 0);
-	
-    memset(sendcount,0,5);
-    sprintf(sendcount,"%d",count);
-    strcat(sendcount,"\r");
-    at_len = strlen(sendcount);
-    
-    u1_send(ats[11],strlen(ats[11]));
-    u1_send(sendcount,at_len);
-    
-    sem_ret = atomSemGet(&sem_send,1000);
-    if(sem_ret == ATOM_OK){
-      u1_send(send,count);
-    }else{
-      _asm("NOP");
-    }
-	
-    sem_ret = atomSemGet(&sem_sendresult,3000);
-    if(sem_ret == ATOM_OK){
-      if(send_server_result == 1){
-        ret = 1;
-      }
-    }else{
-      _asm("NOP");
-    }
-    atomMutexPut(&sendserver_mutex);
-    if(ret){
-      return SUCCESS;
-    }
+  CPU_TS ts;
+  OS_ERR err;
+  uint8_t sendcount[5];
+  
+  //send the data
+  sprintf(sendcount,"%d",count);
+  
+  Server_WriteStr(ats[11]);
+  Server_WriteStr(sendcount);
+  Server_WriteStr("\r");
+  
+  OSSemPend(&SEM_Send,
+            1000,
+            OS_OPT_PEND_BLOCKING,
+            &ts,
+            &err);
+  
+  
+  if(err != OS_ERR_NONE){
     return ERROR;
+  }
+  
+  Server_Write(send,count);
+  /*
+  OSSemPend(&SEM_SendOver,
+            1000,
+            OS_OPT_PEND_BLOCKING,
+            &ts,
+            &err);
+  
+  if(err != OS_ERR_NONE){
+    return ERROR;
+  }*/
+  return SUCCESS;
 }
 
 
 
-ErrorStatus connectserver(void){
+ErrorStatus connect(void){
     if(ate_() == ERROR){
         return ERROR;
     }
@@ -441,78 +442,59 @@ ErrorStatus connectserver(void){
         return ERROR;
     }
     
-    Online = 1;
+    connectstate = 1;
     
     return SUCCESS;
 }
 
 
-void Device_Cmd(FunctionalState NewState){
-    u8 cnt = 0;
-    u8 simstart = 0;
-    if(NewState != DISABLE){
-        
-        //enable the power
-        GPIO_WriteHigh(GPIOB,GPIO_PIN_0);   //give m590e the power
-        
-        //low the on_off
-        GPIO_WriteHigh(GPIOE,GPIO_PIN_7);
-        atomTimerDelay(1200);
-        //high the on_off
-        GPIO_WriteLow(GPIOE,GPIO_PIN_7);
-        
-        atomTimerDelay(3000);
-        
-        while(cnt < 100){
-          if(ate_() == SUCCESS){
-            simstart = 1;
-            break;
-          }
-          cnt++;
-          atomTimerDelay(300);
-        }
-        
-        if(simstart == 0){
-          _asm("NOP");
-        }
-        
-    }else{
-        
-        //模块关机
-        /*
-        //low the on_off
-        GPIO_WriteHigh(GPIOE,GPIO_PIN_7);
-        atomTimerDelay(2000);
-        //high the on_off
-        GPIO_WriteLow(GPIOE,GPIO_PIN_7);
-        */
-        
-        //disalbe the power
-        GPIO_WriteLow(GPIOB,GPIO_PIN_0);
-        atomTimerDelay(3000);
+ErrorStatus Device_Cmd(FunctionalState NewState){
+  OS_ERR err;
+  CPU_TS ts;
+  uint8_t cnt = 0;
+  
+  if(NewState != DISABLE){
+    //enable the power
+    GPIO_SetBits(GPIOA,GPIO_Pin_1); 
+    //low the on_off
+    GPIO_ResetBits(GPIOA,GPIO_Pin_4);
+    OSTimeDlyHMSM(0,0,1,200,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    //high the on_off
+    GPIO_SetBits(GPIOA,GPIO_Pin_4);
+    
+    OSTimeDlyHMSM(0,0,3,0,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    
+    while(cnt < 250){
+      
+      if(ate_() == SUCCESS){
+        return SUCCESS;
+      }
+      
+      OSTimeDlyHMSM(0,0,0,100,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+      cnt++;
     }
+    
+    return ERROR;
+  }else{
+    //disable the power
+    GPIO_ResetBits(GPIOA,GPIO_Pin_1);
+    OSTimeDlyHMSM(0,0,3,0,
+                  OS_OPT_TIME_HMSM_STRICT,
+                  &err);
+    return SUCCESS;
+  }
 }
 
-/*
-void Device_Conf(void){
-    //get the telnum
-    //get the cjqormeter
-    //get the apn
-    //get the username
-    //get the password
-    //get the dns
-    
-    if(test == 1){
-        strcpy(dns,TEST_DNS);
-    }
-    
-    //get the ip
-    //get the port
-    if(*(u8 *)GPRS_ADDR != 0x00){
-        memcpy_((u8 *)GPRS_ADDR,telnum,11);
-    }
-    memcpy_((u8 *)SLAVE_TYPE_ADDR,&slave,1);
-    
-}
-
-*/
+//改变在线的状态
+void change_connect(uint8_t state){
+  CPU_SR_ALLOC();
+  CPU_CRITICAL_ENTER();
+  connectstate = state;
+  CPU_CRITICAL_EXIT();
+}  
