@@ -93,6 +93,9 @@ volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
 
 uint8_t slave_mbus = 0xff; //0xaa mbus   0xff  485
 uint8_t device_test = 0xFF; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~avenger0422.vicp.cc
+uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
+
+
 void TaskStart(void *p_arg);
 void TaskCreate(void);
 void ObjCreate(void);

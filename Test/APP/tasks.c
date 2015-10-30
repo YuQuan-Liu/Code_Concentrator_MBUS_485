@@ -824,6 +824,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   Device_Read(DISABLE);
 }
 
+extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 //只管读表
 void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc){
     OS_ERR err;
@@ -848,8 +849,16 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     }
     *buf_frame++ = 0x01; //C
     *buf_frame++ = 0x03; //len
-    *buf_frame++ = DATAFLAG_RD_L;
-    *buf_frame++ = DATAFLAG_RD_H;
+    if(di_seq == 0xFF){
+      //默认低位在前
+      *buf_frame++ = DATAFLAG_RD_L;
+      *buf_frame++ = DATAFLAG_RD_H;
+    }else{
+      //千宝通使用的顺序。。。大表使用
+      *buf_frame++ = DATAFLAG_RD_H;
+      *buf_frame++ = DATAFLAG_RD_L;
+    }
+    
     *buf_frame++ = 0x01;
     *buf_frame++ = check_cs(buf_frame_,11+3);
     *buf_frame++ = FRAME_END;
@@ -1828,13 +1837,35 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     configflash = OSMemGet(&MEM_Buf,&err);
     
     sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&slave_mbus,1);
+    Mem_Copy(configflash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&device_test,1);
     sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
     
     OSMemPut(&MEM_Buf,configflash,&err);
     
     device_ack(desc,server_seq_);
     break;
+  case FN_DI_SEQ:
+    if(*(buf_frame + DATA_POSITION) == 0xAA){
+      //千宝通使用的大表模块
+      di_seq = 0xAA;
+    }
+    
+    if(*(buf_frame + DATA_POSITION) == 0xFF){
+      //默认
+      di_seq = 0xFF;
+    }
+    
+    configflash = OSMemGet(&MEM_Buf,&err);
+    
+    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(configflash + (sFLASH_READMETER_DI_SEQ - sFLASH_CON_START_ADDR),&di_seq,1);
+    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+    
+    OSMemPut(&MEM_Buf,configflash,&err);
+    
+    device_ack(desc,server_seq_);
+    break;
+    
   }
   
 }
@@ -2182,6 +2213,9 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_TEST:
     ack_query_test(desc,server_seq_);
+    break;
+  case FN_DI_SEQ:
+    ack_query_di_seq(desc,server_seq_);
     break;
   }
 }
@@ -2783,6 +2817,53 @@ void ack_query_test(uint8_t desc,uint8_t server_seq_){
   *buf_frame++ = FN_TEST;
   
   *buf_frame++ = device_test;
+  *buf_frame++ = check_cs(buf_frame_+6,10);
+  *buf_frame++ = FRAME_END;
+  
+  
+  if(desc){
+    //to m590e
+    send_server(buf_frame_,18);
+  }else{
+    //to 485
+    Server_Write_485(buf_frame_,18);
+  }
+  
+  OSMemPut(&MEM_Buf,buf_frame_,&err);
+  
+}
+
+void ack_query_di_seq(uint8_t desc,uint8_t server_seq_){
+  OS_ERR err;
+  uint8_t * buf_frame = 0;
+  uint8_t * buf_frame_ = 0;
+  uint16_t * buf_frame_16 = 0;
+  
+  buf_frame = OSMemGet(&MEM_Buf,&err);
+  if(buf_frame == 0){
+    return;
+  }
+  buf_frame_ = buf_frame;
+  *buf_frame++ = FRAME_HEAD;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = FRAME_HEAD;
+  
+  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+  /**/
+  *buf_frame++ = deviceaddr[0];
+  *buf_frame++ = deviceaddr[1];
+  *buf_frame++ = deviceaddr[2];
+  *buf_frame++ = deviceaddr[3];
+  *buf_frame++ = deviceaddr[4];
+  
+  *buf_frame++ = AFN_QUERY;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
+  *buf_frame++ = FN_DI_SEQ;
+  
+  *buf_frame++ = di_seq;
   *buf_frame++ = check_cs(buf_frame_+6,10);
   *buf_frame++ = FRAME_END;
   

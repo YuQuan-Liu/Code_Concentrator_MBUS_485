@@ -204,7 +204,7 @@ void BSP_USART_Init(void){
   USART_InitTypeDef usart_init;
   
   /*USART1  485*/
-  usart_init.USART_BaudRate = 1200;
+  usart_init.USART_BaudRate = 2400;
   usart_init.USART_WordLength = USART_WordLength_9b;
   usart_init.USART_Parity = USART_Parity_Even;
   usart_init.USART_StopBits = USART_StopBits_1;

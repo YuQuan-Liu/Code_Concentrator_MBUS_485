@@ -23,7 +23,7 @@ void ack_query_cjq(uint8_t desc,uint8_t server_seq_);
 void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t server_seq_);
 void ack_query_addr(uint8_t desc,uint8_t server_seq_);
 void ack_query_ip(uint8_t desc,uint8_t server_seq_);
-
+void ack_query_di_seq(uint8_t desc,uint8_t server_seq_);
 
 void meter_read(uint8_t * buf_frame,uint8_t desc);  //³­±í
 void meter_control(uint8_t * buf_frame,uint8_t desc);   //¿ª¹Ø·§

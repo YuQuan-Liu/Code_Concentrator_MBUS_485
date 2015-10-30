@@ -82,7 +82,7 @@
 #define sFLASH_POOL_INIT        sFLASH_METER_Q_LAST + 3          //FLASH 初始化没有  0xAA 初始化了    0xFF 没有初始化
     
 #define sFLASH_METER_MBUS    sFLASH_CON_START_ADDR + 0xC0     //是否采用MBUS   0xAA MBUS表   0xFF  没有MBUS表(default)   
-
+#define sFLASH_READMETER_DI_SEQ    sFLASH_METER_MBUS + 0x01     //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
     
 void sFLASH_DeInit(void);
 void sFLASH_Init(void);

@@ -636,7 +636,7 @@ extern uint16_t port_;
 
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
 extern uint8_t device_test; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~avenger0422.vicp.cc
-
+extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
 void param_conf(void){
   
   uint8_t temp[2] = {0x00,0x00};
@@ -664,6 +664,8 @@ void param_conf(void){
   }
   //the type of the slave
   sFLASH_ReadBuffer((uint8_t *)&slave_mbus,sFLASH_METER_MBUS,1);
+  //the seq of the di  数据标示的顺序
+  sFLASH_ReadBuffer((uint8_t *)&di_seq,sFLASH_READMETER_DI_SEQ,1);
   //the device 's addr
   temp[0] = 0x00;
   sFLASH_ReadBuffer(temp,sFLASH_DEVICE_ADDR,1);
