@@ -26,10 +26,6 @@ extern OS_SEM SEM_ACKData;     //服务器对数据的ACK
 extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
 extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
 
-extern OS_TMR TMR_Server;
-extern OS_TMR TMR_Slave;
-extern OS_TMR TMR_Server_200;      //200ms
-
 extern volatile uint8_t reading;
 extern volatile uint8_t connectstate; 
 extern uint8_t deviceaddr[5];
@@ -42,7 +38,7 @@ uint8_t data_seq = 0;  //记录数据的序列号 等待ack
 uint8_t local_seq = 0;  //本地序列号
 uint8_t server_seq = 0;  //服务器端序列号  抄表时  会同步此序列号
 
-
+uint8_t fe[4] = {0xFE,0xFE,0xFE,0xFE};  //抄表时前面发送的4个0xFE
 
 uint8_t * volatile buf = 0;   //the buf used put the data in 
 uint8_t * volatile buf_;       //keep the buf's ptr  used to release the buf
@@ -62,20 +58,33 @@ void Task_Slave(void *p_arg){
     
   
   while(DEF_TRUE){
+    //收到0x68之后  如果200ms 没有收到数据  就认为超时了
+    mem_ptr = OSQPend(&Q_Slave,200,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+    
+    if(err == OS_ERR_TIMEOUT){
+      if(start_slave == 1){
+        buf = buf_;
+        start_slave = 0;
+        frame_len = 0;
+      }
+      continue;
+    }
+    
+    
+    data = *mem_ptr;
+    OSMemPut(&MEM_ISR,mem_ptr,&err);
+    
     if(buf == 0){
       buf = OSMemGet(&MEM_Buf,
                      &err);
-      buf_ = buf;
-      Mem_Set(buf_,0x00,256); //clear the buf
       if(err != OS_ERR_NONE){
         asm("NOP");
         //didn't get the buf
       }
+      buf_ = buf;
+      Mem_Set(buf_,0x00,256); //clear the buf
+      
     }
-    
-    mem_ptr = OSQPend(&Q_Slave,0,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-    data = *mem_ptr;
-    OSMemPut(&MEM_ISR,mem_ptr,&err);
     
     if(reading){
       //it is the frame come from the meter
@@ -84,16 +93,7 @@ void Task_Slave(void *p_arg){
           *buf++ = data;
           frame_len = 0;
           start_slave = 1;
-          //start the tmr_slave
-          OSTmrStart(&TMR_Slave,
-                     &err);
-          if(err != OS_ERR_NONE){
-            asm("NOP");
-          }
-        }else{
-          //do nothing
         }
-        
       }else{
         *buf++ = data;
         if((buf-buf_) == 11){
@@ -105,11 +105,6 @@ void Task_Slave(void *p_arg){
             //check the frame cs
             if(*(buf-2) == check_cs(buf_,frame_len-2)){
               //the frame is ok;
-              asm("NOP");
-              OSTmrStop(&TMR_Slave,
-                          OS_OPT_TMR_NONE,
-                          0,
-                          &err);
               OSQPost(&Q_ReadData,
                       buf_,
                       frame_len,
@@ -120,6 +115,10 @@ void Task_Slave(void *p_arg){
               start_slave = 0;
               frame_len = 0;
             }
+          }else{
+            buf = buf_;
+            start_slave = 0;
+            frame_len = 0;
           }
         }
       }
@@ -133,14 +132,6 @@ void Task_Slave(void *p_arg){
           header_count = 1;
           header_ok = 0;
           start_slave = 1;
-          //start the tmr_slave
-          OSTmrStart(&TMR_Slave,
-                     &err);
-          if(err != OS_ERR_NONE){
-            asm("NOP");
-          }
-        }else{
-          //do nothing
         }
       }else{
         *buf++ = data;
@@ -178,11 +169,6 @@ void Task_Slave(void *p_arg){
               //check the frame cs
               if(*(buf-2) == check_cs(buf_+6,frame_len-8)){
                 //the frame is ok;
-                asm("NOP");
-                OSTmrStop(&TMR_Slave,
-                          OS_OPT_TMR_NONE,
-                          0,
-                          &err);
                 switch(*(buf_+AFN_POSITION)){
                   case AFN_CONFIG:
                   case AFN_QUERY:
@@ -738,23 +724,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
       sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
       sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
       
-      //打开采集器透传   下面直接接表时  采集器的地址为"\xFF\xFF\xFF\xFF\xFF\xFF"
-      if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-        if(cjq_open(cjq_addr,block_cjq) == 0){
-          //采集器没有打开，
-          //记录当前采集器下所有表  采集器超时
-          configflash = OSMemGet(&MEM_Buf,&err);
-          for(j=0;j < cjqmeter_count;j++){
-            sFLASH_ReadBuffer(configflash,block_meter,256);
-            *(configflash + 22) = (*(configflash + 22)) | 0x80;
-            sFLASH_EraseWritePage(configflash,block_meter,256);
-            
-            sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
-          }
-          OSMemPut(&MEM_Buf,configflash,&err);
-          continue;
-        }
-      }
+      cjq_open(cjq_addr,block_cjq);
       
       for(j=0;j < cjqmeter_count;j++){
         sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
@@ -764,11 +734,7 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
       }
       
-      
-      if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-        //关闭采集器透传
-        cjq_close(cjq_addr,block_cjq);
-      }
+      cjq_close(cjq_addr,block_cjq);
       sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
     }
     meter_send(1,0,desc);
@@ -784,34 +750,14 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         
         if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
           //找到这个表了。。。
-          
-          //打开采集器透传   下面直接接表时  采集器的地址为"\xFF\xFF\xFF\xFF\xFF\xFF"
-          if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-            if(cjq_open(cjq_addr,block_cjq) == 0){
-              //采集器没有打开，
-              //记录当前表采集器超时
-              //continue;
-              configflash = OSMemGet(&MEM_Buf,&err);
-              sFLASH_ReadBuffer(configflash,block_meter,256);
-              *(configflash + 22) = (*(configflash + 22)) | 0x80;
-              sFLASH_EraseWritePage(configflash,block_meter,256);
-              OSMemPut(&MEM_Buf,configflash,&err);
-              //device_nack(desc);
-              
-              meter_fount = 1; 
-              break;
-            }
-          }
+          cjq_open(cjq_addr,block_cjq);
           
           meter_read_single(meter_addr,block_meter,meter_type,desc);
           
           //send the data;
           meter_send(0,block_meter,desc);
           
-          if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-            //关闭采集器透传
-            cjq_close(cjq_addr,block_cjq);
-          }
+          cjq_close(cjq_addr,block_cjq);
           
           meter_fount = 1; 
           break;
@@ -864,11 +810,12 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     *buf_frame++ = FRAME_END;
     
     for(i =0;i<4;i++){
-      read[i] = 0xFE;
+      read[i] = 0x00;
+      half[i] = 0x00;
     }
     
     for(i = 0;success == 0 && i < 3;i++){
-      Slave_Write(read,4);
+      Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+3);
       buf_readdata = OSQPend(&Q_ReadData,1200,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
@@ -1223,23 +1170,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
       if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
         //找到这个表了。。。
         
-        //打开采集器透传   下面直接接表时  采集器的地址为"\xFF\xFF\xFF\xFF\xFF\xFF"
-        if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-          if(cjq_open(cjq_addr,block_cjq) == 0){
-            //采集器没有打开， 返回nack 
-            //记录当前表采集器超时  todo...
-            
-            configflash = OSMemGet(&MEM_Buf,&err);
-            sFLASH_ReadBuffer(configflash,block_meter,256);
-            *(configflash + 22) = (*(configflash + 22)) | 0x80;
-            sFLASH_EraseWritePage(configflash,block_meter,256);
-            OSMemPut(&MEM_Buf,configflash,&err);
-            //device_nack(desc);
-            
-            meter_fount = 1; 
-            break;
-          }
-        }
+        cjq_open(cjq_addr,block_cjq);
         
         sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,2);
         server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
@@ -1252,10 +1183,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
           break;
         }
         
-        if(Mem_Cmp(cjq_addr,"\xFF\xFF\xFF\xFF\xFF\xFF",6) == DEF_NO){
-          //关闭采集器透传
-          cjq_close(cjq_addr,block_cjq);
-        }
+        cjq_close(cjq_addr,block_cjq);
           
         meter_fount = 1; 
         break;
@@ -1270,18 +1198,6 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
 
 uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
   
-    OS_ERR err;
-    CPU_TS ts;
-    uint8_t buf_frame_[17];
-    uint8_t i = 0;
-    uint16_t msg_size = 0;
-    uint8_t * buf_readdata = 0;
-    uint8_t success = 0;
-    uint8_t st_l = 0;
-    uint8_t * configflash = 0;
-    uint8_t * buf_frame = 0;
-    
-    
     if(slave_mbus == 0xAA){
       //mbus ~~~
       switch (cjq_addr[0]){
@@ -1300,80 +1216,11 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
       }
       
       return 1;
-    }else{
-      //485 ~~~
-      buf_frame = buf_frame_;
-      *buf_frame++ = FRAME_HEAD;
-      *buf_frame++ = 0xA0;  //采集器标志
-      for(i=0;i<6;i++){
-        *buf_frame++ = cjq_addr[i];
-      }
-      *buf_frame++ = 0x00;  //采集器最高位
-      *buf_frame++ = 0x04; //C
-      *buf_frame++ = 0x04; //len
-      *buf_frame++ = DATAFLAG_WC_L;
-      *buf_frame++ = DATAFLAG_WC_H;
-      *buf_frame++ = 0x01;
-      *buf_frame++ = OPEN_CJQ;
-      *buf_frame++ = check_cs(buf_frame_,11+4);
-      *buf_frame++ = FRAME_END;
-      
-      for(i = 0;success == 0 && i < 3;i++){
-        Slave_Write(buf_frame_,13+4);
-        buf_readdata = OSQPend(&Q_ReadData,3000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-        if(err != OS_ERR_NONE){
-          if(i==2){
-            //开采集器失败  存flash  return nack
-            success = 0;
-          }
-          continue;
-        }
-        //接收到正确的数据
-        //判断表地址
-        if(Mem_Cmp(cjq_addr,buf_readdata+2,6) == DEF_YES){
-          //获取ST
-          st_l = *(buf_readdata + 14);
-          if((st_l & 0x03) == 0x00){
-            //opened  return ack
-            success = 1;
-          }else{
-            //开采集器失败  存flash  return nack
-            success = 0;
-          }
-        }
-        
-        OSMemPut(&MEM_Buf,buf_readdata,&err);
-        
-      }
-      
-      if(success == 0){
-        //开采集器失败  存flash  return nack
-        configflash = OSMemGet(&MEM_Buf,&err);
-        sFLASH_ReadBuffer(configflash,block_cjq,256);
-        Mem_Copy(configflash + 23,"\x01",1);  //超时
-        sFLASH_EraseWritePage(configflash,block_cjq,256);
-        
-        OSMemPut(&MEM_Buf,configflash,&err);
-        
-      }
-      
-      return success;
     }
 }
 
 uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
   
-    OS_ERR err;
-    CPU_TS ts;
-    uint8_t buf_frame_[17];
-    uint8_t i;
-    uint16_t msg_size;
-    uint8_t * buf_readdata;
-    uint8_t success = 0;
-    uint8_t st_l;
-    uint8_t * configflash;
-    uint8_t * buf_frame;
-    
     if(slave_mbus == 0xAA){
       //mbus ~~~
       switch (cjq_addr[0]){
@@ -1391,73 +1238,13 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
           break;
       }
       return 1;
-    }else{
-      //485 ~~~
-      buf_frame = buf_frame_;
-      *buf_frame++ = FRAME_HEAD;
-      *buf_frame++ = 0xA0;  //采集器标志
-      for(i=0;i<6;i++){
-        *buf_frame++ = cjq_addr[i];
-      }
-      *buf_frame++ = 0x00;  //采集器最高位
-      *buf_frame++ = 0x04; //C
-      *buf_frame++ = 0x04; //len
-      *buf_frame++ = DATAFLAG_WC_L;
-      *buf_frame++ = DATAFLAG_WC_H;
-      *buf_frame++ = 0x01;
-      *buf_frame++ = CLOSE_CJQ;
-      *buf_frame++ = check_cs(buf_frame_,11+4);
-      *buf_frame++ = FRAME_END;
-      
-      for(i = 0;success == 0 && i < 3;i++){
-        Slave_Write(buf_frame_,13+4);
-        buf_readdata = OSQPend(&Q_ReadData,3000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-        if(err != OS_ERR_NONE){
-          if(i==2){
-            //关采集器失败  存flash  return nack
-            success = 0;
-          }
-          continue;
-        }
-        //接收到正确的数据
-        //判断表地址
-        if(Mem_Cmp(cjq_addr,buf_readdata+2,6) == DEF_YES){
-          //获取ST
-          st_l = *(buf_readdata + 14);
-          if((st_l & 0x03) == 0x02){
-            //closed  return ack
-            success = 1;
-          }else{
-            //关采集器失败  存flash  return nack
-            success = 0;
-          }
-        }
-        
-        OSMemPut(&MEM_Buf,buf_readdata,&err);
-        
-      }
-      
-      if(success == 0){
-        //关采集器失败  存flash  return nack
-        configflash = OSMemGet(&MEM_Buf,&err);
-        sFLASH_ReadBuffer(configflash,block_cjq,256);
-        Mem_Copy(configflash + 23,"\x01",1);  //超时
-        sFLASH_EraseWritePage(configflash,block_cjq,256);
-        
-        OSMemPut(&MEM_Buf,configflash,&err);
-        
-      }
-      
-      return success;
     }
-    
 }
 
 void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
     OS_ERR err;
     CPU_TS ts;
     uint8_t buf_frame_[17];
-    uint8_t fe[4];
     uint8_t i = 0;
     uint16_t msg_size = 0;
     uint8_t * buf_readdata = 0;
@@ -1480,10 +1267,6 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     *buf_frame++ = OPEN_VALVE;
     *buf_frame++ = check_cs(buf_frame_,11+4);
     *buf_frame++ = FRAME_END;
-    
-    for(i=0;i<4;i++){
-      fe[i] = 0xFE;
-    }
     
     for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
@@ -1537,7 +1320,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     OS_ERR err;
     CPU_TS ts;
     uint8_t buf_frame_[17];
-    uint8_t fe[4];
     uint8_t i = 0;
     uint16_t msg_size = 0;
     uint8_t * buf_readdata = 0;
@@ -1561,10 +1343,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     *buf_frame++ = check_cs(buf_frame_,11+4);
     *buf_frame++ = FRAME_END;
     
-    for(i=0;i<4;i++){
-      fe[i] = 0xFE;
-    }
-    
     for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+4);
@@ -1581,7 +1359,10 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
         //获取ST
         st_l = *(buf_readdata + 14);
-        if((st_l & 0x02) == 0x02){
+        //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
+        //me：协议中指的是D1 = 1
+        //骏普：D0 = 1 为关
+        if((st_l & 0x02) == 0x02 | (st_l & 0x01) == 0x01){
           //opened  return ack
           success = 1;
         }else{

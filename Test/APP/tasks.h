@@ -35,6 +35,11 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
 void device_ack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485
 void device_nack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485
 
+/*
+如果底层有采集器  底层采集器使用透传模式
+集中器直接发送抄表指令
+cjq_open   cjq_close  只对4路MBUS继电器进行控制
+*/
 uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq);
 uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq);
 

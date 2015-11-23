@@ -76,12 +76,7 @@ OS_Q Q_ReadData;        //发送抄表指令后  下层返回抄表数据
 OS_Q Q_Config;         //配置任务Queue
 OS_Q Q_Deal;         //处理接收到的服务器发送过来的数据
 
-//OS_TMRs
-OS_TMR TMR_Server;      //25s  receive "+PBREADY"
-OS_TMR TMR_Server_2s;      //2s  receive at 
-OS_TMR TMR_Server_100;      //100ms  receive at 
-OS_TMR TMR_Server_200;      //200ms  receive data 
-OS_TMR TMR_Slave;       //1s
+
 
 
 //OS_FLAG
@@ -432,18 +427,7 @@ void ObjCreate(void){
   if(err != OS_ERR_NONE){
     return;
   }
-  //OS_TMR
-  OSTmrCreate(&TMR_Slave,
-              "slave",
-              10,
-              0,
-              OS_OPT_TMR_ONE_SHOT,
-              (OS_TMR_CALLBACK_PTR)Tmr_SlaveCallBack,
-              (void *)0,
-              &err);
-  if(err != OS_ERR_NONE){
-    return;
-  }
+  
   
   //OS_FLAGS
   OSFlagCreate(&FLAG_Event,
