@@ -45,9 +45,6 @@ OS_TCB TCB_OverLoad;
 CPU_STK STK_OverLoad[APP_START_TASK_STK_SIZE];
 
 
-
-
-
 //OS_MEMs
 //receive the data from the ISR    put the data in the mem to deal buf
 OS_MEM MEM_Buf;
@@ -57,6 +54,11 @@ uint8_t mem_buf[6][256];
 OS_MEM MEM_ISR;
 uint8_t mem_isr[30][4];
 
+//配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
+uint8_t config_flash[0x1000];
+
+//OS_MUTEXs;
+OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
 
 //OS_SEMs ;
 
@@ -145,9 +147,9 @@ void TaskStart(void *p_arg){
     if(FLASH_ID == flashid){
       break;
     }
-    OSTimeDlyHMSM(0,0,1,0,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+    OSTimeDly(100,
+              OS_OPT_TIME_DLY,
+              &err);
   }
   
   sFLASH_PoolInit();
@@ -328,6 +330,10 @@ void ObjCreate(void){
   if(err != OS_ERR_NONE){
     return;
   }
+  
+  //OS_MUTEX;
+  //OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
+  OSMutexCreate(&MUTEX_CONFIGFLASH,"",&err);
   
   //OS_SEM
   OSSemCreate(&SEM_ServerTX,

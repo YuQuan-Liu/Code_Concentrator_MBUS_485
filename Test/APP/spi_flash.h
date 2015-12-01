@@ -66,9 +66,14 @@
 #define sFLASH_POOL_FREE        sFLASH_POOL + 3
 #define sFLASH_POOL_USED        sFLASH_POOL_FREE + 2    
 #define sFLASH_POOL_ALL         sFLASH_POOL_USED + 2   
-#define sFLASH_POOL_SIZE        0x1000  //4K
-#define sFLASH_POOL_NUM         (sFLASH_END_ADDR - sFLASH_START_ADDR + 1)/sFLASH_POOL_SIZE  //512
+#define sFLASH_SECTOR_SIZE        0x1000  //4K
+#define sFLASH_SECTOR_NUM         (sFLASH_END_ADDR - sFLASH_START_ADDR + 1)/sFLASH_SECTOR_SIZE  //512
+
+//将511个Sector 分成2044个1k大小的存储块
+#define sFLASH_POOL_SIZE        0x400  //1K    
+#define sFLASH_POOL_NUM         (sFLASH_CON_START_ADDR - sFLASH_START_ADDR)/sFLASH_POOL_SIZE  //2044
     
+#define sFLASH_PAGE_SIZE        0x100  //256
     
 #define sFLASH_CJQ_Q_START      sFLASH_CON_START_ADDR + 0xA0
 #define sFLASH_CJQ_COUNT        sFLASH_CJQ_Q_START + 3        //采集器的数量
@@ -84,6 +89,7 @@
 #define sFLASH_METER_MBUS    sFLASH_CON_START_ADDR + 0xC0     //是否采用MBUS   0xAA MBUS表   0xFF  没有MBUS表(default)   
 #define sFLASH_READMETER_DI_SEQ    sFLASH_METER_MBUS + 0x01     //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
     
+
 void sFLASH_DeInit(void);
 void sFLASH_Init(void);
 void sFLASH_EraseSector(uint32_t SectorAddr);
