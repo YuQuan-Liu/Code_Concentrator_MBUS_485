@@ -158,15 +158,13 @@ void TaskStart(void *p_arg){
   ObjCreate();
   
   if(test){
-    buf = OSMemGet(&MEM_Buf,&err);
     while(1){
       asm("NOP");
-      sFLASH_ReadBuffer(buf,sectionaddr,256);
+      sFLASH_ReadBuffer(config_flash,sectionaddr,0x1000);
       if(test_write){
         sFLASH_EraseWritePage(buf,sectionaddr,256);
       }
     }
-    OSMemPut(&MEM_Buf,buf,&err);
   }
   //Open the IWDG;
   //BSP_IWDG_Init();

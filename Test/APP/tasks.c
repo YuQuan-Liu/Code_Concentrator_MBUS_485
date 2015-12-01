@@ -705,7 +705,6 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   uint8_t meter_status[2];
   
   uint8_t meter_fount = 0;
-  uint8_t * configflash = 0;
   //查询是否有这个表
   
   sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
@@ -770,6 +769,8 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   Device_Read(DISABLE);
 }
 
+extern uint8_t config_flash[];  //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
+extern OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 //只管读表
 void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc){
@@ -784,7 +785,6 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
-    uint8_t * configflash = 0;
     uint8_t * buf_frame = 0;
     
     buf_frame = buf_frame_;
@@ -839,21 +839,29 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       
       OSMemPut(&MEM_Buf,buf_readdata,&err);
     }
-    configflash = OSMemGet(&MEM_Buf,&err);
-    sFLASH_ReadBuffer(configflash,block_meter,256);
+    
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    
+    sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
     if(success == 0){
       //读表失败  存flash  return nack
-      //Mem_Copy(configflash + 22,"\x40",1);  //超时
-      *(configflash + 22) = (*(configflash + 22)) | 0x40;
-      sFLASH_EraseWritePage(configflash,block_meter,256);
+      *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
     }else{
-      Mem_Copy(configflash + 22,&st_l,1);  //记录st信息
-      Mem_Copy(configflash + 14,read,4);        //读数
-      Mem_Copy(configflash + 24,half,4);        //半位
-      sFLASH_EraseWritePage(configflash,block_meter,256);
+      Mem_Copy(config_flash+block_meter%0x1000 + 22,&st_l,1);  //记录st信息
+      Mem_Copy(config_flash+block_meter%0x1000 + 14,read,4);        //读数
+      Mem_Copy(config_flash+block_meter%0x1000 + 24,half,4);        //半位
     }
-    OSMemPut(&MEM_Buf,configflash,&err);
     
+    //将配置好的Flash块重新写入到Flash中。
+    sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+    
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
 }
 
 //all = 1 发送全部表  all = 0 发送表块对应的表
@@ -1145,7 +1153,6 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
   uint8_t meter_status[2];
   
   uint8_t meter_fount = 0;
-  uint8_t * configflash = 0;
   uint8_t server_seq_ = 0;  
   //查询是否有这个表
   
@@ -1250,7 +1257,6 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
-    uint8_t * configflash = 0;
     uint8_t * buf_frame = 0;
     
     buf_frame = buf_frame_;
@@ -1297,22 +1303,31 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       OSMemPut(&MEM_Buf,buf_readdata,&err);
       
     }
-    configflash = OSMemGet(&MEM_Buf,&err);
-    sFLASH_ReadBuffer(configflash,block_meter,256);
+    
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
     if(success == 0){
       //开阀失败  存flash  return nack
       //Mem_Copy(configflash + 22,"\x43",1);  //超时
-      *(configflash + 22) = (*(configflash + 22)) | 0x40;
-      sFLASH_EraseWritePage(configflash,block_meter,256);
+      *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
       
       //device_nack(desc,server_seq_);
     }else{
-      Mem_Copy(configflash + 22,"\x00",1);  //开
-      sFLASH_EraseWritePage(configflash,block_meter,256);
-      
+      //开
+      *(config_flash+block_meter%0x1000 + 22) = 0x00;
       device_ack(desc,server_seq_);   //return nack;
     }
-    OSMemPut(&MEM_Buf,configflash,&err);
+    
+    //将配置好的Flash块重新写入到Flash中。
+    sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+    
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
 }
 
@@ -1325,7 +1340,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
-    uint8_t * configflash = 0;
     uint8_t * buf_frame = 0;  
   
     buf_frame = buf_frame_;
@@ -1370,29 +1384,33 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
           success = 0;
         }
       }
-      
       OSMemPut(&MEM_Buf,buf_readdata,&err);
-      
     }
     
-    configflash = OSMemGet(&MEM_Buf,&err);
-    sFLASH_ReadBuffer(configflash,block_meter,256);
+    
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
     
     if(success == 0){
       //开阀失败  存flash  return nack
       //Mem_Copy(configflash + 22,"\x43",1);  //超时
-      *(configflash + 22) = (*(configflash + 22)) | 0x40;
-      sFLASH_EraseWritePage(configflash,block_meter,256);
-      
+      *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
       //device_nack(desc,server_seq_);  //return nack;
     }else{
-      Mem_Copy(configflash + 22,"\x02",1);  //关阀
-      sFLASH_EraseWritePage(configflash,block_meter,256);
-      
-      device_ack(desc,server_seq_);  //return ack;
+      *(config_flash+block_meter%0x1000 + 22) = 0x02;  //关阀
+      device_ack(desc,server_seq_);   //return ack;
     }
     
-    OSMemPut(&MEM_Buf,configflash,&err);
+    //将配置好的Flash块重新写入到Flash中。
+    sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+    
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
 }
 
 //config and query the parameter
@@ -1432,8 +1450,8 @@ extern uint8_t device_test; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~aveng
 
 void param_config(uint8_t * buf_frame,uint8_t desc){
   OS_ERR err;
+  CPU_TS ts;
   uint8_t ip_port_[6];
-  uint8_t * configflash;
   
   uint16_t i = 0;
   uint16_t cjq_count = 0;
@@ -1480,22 +1498,25 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     Str_Cat(port,ip_port_);
     Str_Cat(port,"\r");
     
-    configflash = OSMemGet(&MEM_Buf,&err);
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
     
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_CON_IP - sFLASH_CON_START_ADDR),ip,17);
-    Mem_Copy(configflash + (sFLASH_CON_PORT - sFLASH_CON_START_ADDR),port,8);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_CON_IP - sFLASH_CON_START_ADDR),ip,17);
+    Mem_Copy(config_flash + (sFLASH_CON_PORT - sFLASH_CON_START_ADDR),port,8);
     
-    Mem_Copy(configflash + (sFLASH_CON_IP1 - sFLASH_CON_START_ADDR),&ip1,1);
-    Mem_Copy(configflash + (sFLASH_CON_IP2 - sFLASH_CON_START_ADDR),&ip2,1);
-    Mem_Copy(configflash + (sFLASH_CON_IP3 - sFLASH_CON_START_ADDR),&ip3,1);
-    Mem_Copy(configflash + (sFLASH_CON_IP4 - sFLASH_CON_START_ADDR),&ip4,1);
-    Mem_Copy(configflash + (sFLASH_CON_PORT_ - sFLASH_CON_START_ADDR),&port_,2);
+    Mem_Copy(config_flash + (sFLASH_CON_IP1 - sFLASH_CON_START_ADDR),&ip1,1);
+    Mem_Copy(config_flash + (sFLASH_CON_IP2 - sFLASH_CON_START_ADDR),&ip2,1);
+    Mem_Copy(config_flash + (sFLASH_CON_IP3 - sFLASH_CON_START_ADDR),&ip3,1);
+    Mem_Copy(config_flash + (sFLASH_CON_IP4 - sFLASH_CON_START_ADDR),&ip4,1);
+    Mem_Copy(config_flash + (sFLASH_CON_PORT_ - sFLASH_CON_START_ADDR),&port_,2);
     
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-    
-    OSMemPut(&MEM_Buf,configflash,&err);
-    
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     device_ack(desc,server_seq_);
     
     break;
@@ -1507,13 +1528,17 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     deviceaddr[3] = *(buf_frame + DATA_POSITION + 3);
     deviceaddr[4] = *(buf_frame + DATA_POSITION + 4);  //与新天协议有出入 协议第5位默认为0x00
     
-    configflash = OSMemGet(&MEM_Buf,&err);
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
     
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_DEVICE_ADDR - sFLASH_CON_START_ADDR),deviceaddr,5);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-    
-    OSMemPut(&MEM_Buf,configflash,&err);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_DEVICE_ADDR - sFLASH_CON_START_ADDR),deviceaddr,5);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
     device_ack(desc,server_seq_);
     
@@ -1548,17 +1573,6 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_CJQ:
     if(*(buf_frame + DATA_POSITION) == 0xAA){
-      /*
-      //删除这个采集器
-      block_cjq = search_cjq(buf_frame + DATA_POSITION + 1);
-      if(block_cjq == 0xFFFFFF){
-        //没有这个采集器 do nothing
-      }else{
-        //有这个采集器  将这个采集器下的表Q清空  将采集器删除
-        delete_cjq(block_cjq);
-        device_ack(desc,server_seq_);
-      }
-      */
       //删除全部采集器  即清空集中器中的采集器表信息
       sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
       sFLASH_ReadBuffer((uint8_t *)&block_cjq,sFLASH_CJQ_Q_START,3);
@@ -1594,13 +1608,17 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       slave_mbus = 0xFF;
     }
     
-    configflash = OSMemGet(&MEM_Buf,&err);
-    
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_METER_MBUS - sFLASH_CON_START_ADDR),&slave_mbus,1);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-    
-    OSMemPut(&MEM_Buf,configflash,&err);
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_METER_MBUS - sFLASH_CON_START_ADDR),&slave_mbus,1);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
     device_ack(desc,server_seq_);
     break;
@@ -1615,13 +1633,16 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       device_test = 0xFF;
     }
     
-    configflash = OSMemGet(&MEM_Buf,&err);
-    
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&device_test,1);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-    
-    OSMemPut(&MEM_Buf,configflash,&err);
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&device_test,1);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
     device_ack(desc,server_seq_);
     break;
@@ -1636,13 +1657,16 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       di_seq = 0xFF;
     }
     
-    configflash = OSMemGet(&MEM_Buf,&err);
-    
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_READMETER_DI_SEQ - sFLASH_CON_START_ADDR),&di_seq,1);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-    
-    OSMemPut(&MEM_Buf,configflash,&err);
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_READMETER_DI_SEQ - sFLASH_CON_START_ADDR),&di_seq,1);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
     device_ack(desc,server_seq_);
     break;
@@ -1674,11 +1698,11 @@ uint32_t search_meter(uint32_t block_cjq,uint8_t * meteraddr){
 uint32_t add_meter(uint32_t block_cjq,uint8_t * meteraddr){
   uint32_t block_last = 0;
   uint32_t block_new = 0;
-  uint8_t * configflash = 0;
   uint16_t meter_count = 0;
   uint16_t meter_all = 0;
   uint32_t meter_read = 0;
   OS_ERR err;
+  CPU_TS ts;
   
   sFLASH_ReadBuffer((uint8_t *)&meter_count,block_cjq+18,2);
   sFLASH_ReadBuffer((uint8_t *)&meter_all,sFLASH_METER_COUNT,2);
@@ -1688,28 +1712,40 @@ uint32_t add_meter(uint32_t block_cjq,uint8_t * meteraddr){
   meter_all++;  //所有表数量++
   
   block_new = GetFlash();  
+  if(block_new == 0xFFFFFF){
+    return 0xFFFFFF;
+  }
   sFLASH_WritePage(meteraddr,block_new + 6,7);  //表地址
   sFLASH_WritePage((uint8_t *)(meteraddr - 3),block_new + 13,1);  //表类型
   sFLASH_WritePage((uint8_t *)&meter_read,block_new + 14,4);  //表读数  meter_read = 0
   sFLASH_WritePage((uint8_t *)&meter_read,block_new + 22,2);  //表状态  meter_read = 0
   
-  configflash = OSMemGet(&MEM_Buf,&err);
-    
+  OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  if(err != OS_ERR_NONE){
+    //获取MUTEX过程中 出错了...
+    return 0xFFFFFF;
+  }
+  
   if(block_last == 0xFFFFFF){
     //first meter
-    //采集器表的开始和结尾都指向新添加的表的块
-    sFLASH_WritePage((uint8_t *)&block_new,block_cjq + 12,3);  
-    sFLASH_WritePage((uint8_t *)&block_new,block_cjq + 15,3);  
+    sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
     
-    sFLASH_ReadBuffer(configflash,block_cjq,256);  
-    Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);  //采集器下的数目++
-    sFLASH_EraseWritePage(configflash,block_cjq,256);
+    //采集器表的开始和结尾都指向新添加的表的块
+    Mem_Copy(config_flash+block_cjq%0x1000 + 12,(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash+block_cjq%0x1000 + 15,(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);  //采集器下的数目++
+    
+    //将配置好的Flash块重新写入到Flash中。
+    sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+    
   }else{
     //将采集器表的结尾指向新添加的表的块
-    sFLASH_ReadBuffer(configflash,block_cjq,256);
-    Mem_Copy(configflash + 15,(uint8_t *)&block_new,3);
-    Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);  //采集器下的数目++
-    sFLASH_EraseWritePage(configflash,block_cjq,256);
+    sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+    Mem_Copy(config_flash+block_cjq%0x1000 + 15,(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);  //采集器下的数目++
+    sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
     
     //原来最后一个表的下一个表指向新添加的表的块
     sFLASH_WritePage((uint8_t *)&block_new,block_last + 3,3);  
@@ -1718,21 +1754,21 @@ uint32_t add_meter(uint32_t block_cjq,uint8_t * meteraddr){
     
   }
   
-  sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-  Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-  sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-  OSMemPut(&MEM_Buf,configflash,&err);
+  sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+  Mem_Copy(config_flash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
+  sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
   
+  OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
   return block_new;
 }
 
 uint32_t delete_meter(uint32_t block_cjq,uint32_t block_meter){
   uint32_t block_after = 0;
   uint32_t block_before = 0;
-  uint8_t * configflash = 0;
   uint16_t meter_count = 0;
   uint16_t meter_all = 0;
   OS_ERR err;
+  CPU_TS ts;
   
   
   sFLASH_ReadBuffer((uint8_t *)&meter_count,block_cjq+18,2);
@@ -1744,75 +1780,88 @@ uint32_t delete_meter(uint32_t block_cjq,uint32_t block_meter){
   meter_all--;
   
   PutFlash(block_meter);
-  configflash = OSMemGet(&MEM_Buf,&err);
+  
+  OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+  if(err != OS_ERR_NONE){
+    //获取MUTEX过程中 出错了...
+    //return 0xFFFFFF;
+  }
   
   if(meter_count == 0){
     //采集器下唯一的表  block_before、block_after  都为0xFFFFFF
-    sFLASH_ReadBuffer(configflash,block_cjq,256);
-    Mem_Copy(configflash + 12,(uint8_t *)&block_after,3);
-    Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);
-    Mem_Copy(configflash + 15,(uint8_t *)&block_before,3);
-    sFLASH_EraseWritePage(configflash,block_cjq,256);
+    sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+    Mem_Copy(config_flash+block_cjq%0x1000 + 12,(uint8_t *)&block_after,3);
+    Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);
+    Mem_Copy(config_flash+block_cjq%0x1000 + 15,(uint8_t *)&block_before,3);
+    sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+    sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
     
     //更新全部表数目
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
   }else{
     if(block_before == 0xFFFFFF || block_after == 0xFFFFFF){
       //要删除的这个是第一个  或者是最后一个
       if(block_before == 0xFFFFFF){
         //修改后一个的before 为block_before
-        sFLASH_ReadBuffer(configflash,block_after,256);
-        Mem_Copy(configflash + 18,(uint8_t *)&block_before,3);
-        sFLASH_EraseWritePage(configflash,block_after,256);
+        sFLASH_ReadBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_after%0x1000 + 18,(uint8_t *)&block_before,3);
+        sFLASH_EraseSector((block_after/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
         //修改采集器第一个表地址为  block_after  更新采集器表数目
-        sFLASH_ReadBuffer(configflash,block_cjq,256);
-        Mem_Copy(configflash + 12,(uint8_t *)&block_after,3);
-        Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);
-        sFLASH_EraseWritePage(configflash,block_cjq,256);
+        sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_cjq%0x1000 + 12,(uint8_t *)&block_after,3);
+        Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);
+        sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
         //更新全部表数目
-        sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-        Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-        sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+        sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+        Mem_Copy(config_flash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
+        sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
       }
       if(block_after == 0xFFFFFF){
         //修改前一个的next 为block_after
-        sFLASH_ReadBuffer(configflash,block_before,256);
-        Mem_Copy(configflash + 3,(uint8_t *)&block_after,3);
-        sFLASH_EraseWritePage(configflash,block_before,256);
+        sFLASH_ReadBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_before%0x1000 + 3,(uint8_t *)&block_after,3);
+        sFLASH_EraseSector((block_before/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
         //修改采集器的最后一个表地址为  block_before  更新采集器表数目
-        sFLASH_ReadBuffer(configflash,block_cjq,256);
-        Mem_Copy(configflash + 15,(uint8_t *)&block_before,3);
-        Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);
-        sFLASH_EraseWritePage(configflash,block_cjq,256);
+        sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_cjq%0x1000 + 15,(uint8_t *)&block_before,3);
+        Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);
+        sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
         //更新全部表数目
-        sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-        Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-        sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+        sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+        Mem_Copy(config_flash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
+        sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
       }
     }else{
       //要删除的这个在中间
       //修改前一个的next 为block_after
-      sFLASH_ReadBuffer(configflash,block_before,256);
-      Mem_Copy(configflash + 3,(uint8_t *)&block_after,3);
-      sFLASH_EraseWritePage(configflash,block_before,256);
+      sFLASH_ReadBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+      Mem_Copy(config_flash+block_before%0x1000 + 3,(uint8_t *)&block_after,3);
+      sFLASH_EraseSector((block_before/0x1000)*0x1000);
+      sFLASH_WriteBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
       //修改后一个的before 为block_before
-      sFLASH_ReadBuffer(configflash,block_after,256);
-      Mem_Copy(configflash + 18,(uint8_t *)&block_before,3);
-      sFLASH_EraseWritePage(configflash,block_after,256);
-      
-      sFLASH_ReadBuffer(configflash,block_cjq,256);
-      Mem_Copy(configflash + 18,(uint8_t *)&meter_count,2);
-      sFLASH_EraseWritePage(configflash,block_cjq,256);
-      
-      //修改control blocks
-      sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-      Mem_Copy(configflash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
-      sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+      sFLASH_ReadBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+      Mem_Copy(config_flash+block_after%0x1000 + 18,(uint8_t *)&block_before,3);
+      sFLASH_EraseSector((block_after/0x1000)*0x1000);
+      sFLASH_WriteBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+      //更新采集器表数目
+      sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+      Mem_Copy(config_flash+block_cjq%0x1000 + 18,(uint8_t *)&meter_count,2);
+      sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+      sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+      //更新全部表数目
+      sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+      Mem_Copy(config_flash + (sFLASH_METER_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&meter_all,2);
+      sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
     }
   }
-  OSMemPut(&MEM_Buf,configflash,&err);
+  OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
   return block_meter;
   
 }
@@ -1845,10 +1894,10 @@ uint32_t add_cjq(uint8_t * cjqaddr){
   
   uint32_t block_last = 0;
   uint32_t block_new = 0;
-  uint8_t * configflash = 0;
   uint16_t cjq_count = 0;
   uint16_t meter_count = 0;
   OS_ERR err;
+  CPU_TS ts;
   
   sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
   sFLASH_ReadBuffer((uint8_t *)&block_last,sFLASH_CJQ_Q_LAST,3);
@@ -1861,29 +1910,32 @@ uint32_t add_cjq(uint8_t * cjqaddr){
   sFLASH_WritePage((uint8_t *)&meter_count,block_new + 18,2);  //采集器表数  (uint8_t *)0 是地址0x00000000处的值。
   //第一块表和最后一块表都指向了0xFFFFFF
   
-  configflash = OSMemGet(&MEM_Buf,&err);
-    
-  sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
+  OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  if(err != OS_ERR_NONE){
+    //获取MUTEX过程中 出错了...
+    //return 0xFFFFFF;
+  }
+  sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
   
   if(block_last == 0xFFFFFF){
     //this is the first cjq
     //cjq Q 的开始和结尾都指向新添加的采集器块
-    Mem_Copy(configflash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
-    Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-    Mem_Copy(configflash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+    Mem_Copy(config_flash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
   }else{
     //不是第一个
     //将cjq Q 的结尾指向新添加的采集器块
-    Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-    Mem_Copy(configflash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
+    Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+    Mem_Copy(config_flash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_new,3);
     //将原来最后一个采集器的下一个采集器指向新添加的采集器块
     sFLASH_WritePage((uint8_t *)&block_new,block_last + 3,3);
     //将新添加的采集器块中的上一个采集器  指向原来的最后一个采集器
     sFLASH_WritePage((uint8_t *)&block_last,block_new + 20,3);  //上一个采集器
   }
   
-  sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
-  OSMemPut(&MEM_Buf,configflash,&err);
+  sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+  OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
   
   return block_new;
 }
@@ -1897,7 +1949,7 @@ uint32_t delete_cjq(uint32_t block_cjq){
   uint16_t cjq_count = 0;
   uint16_t i = 0;
   OS_ERR err;
-  uint8_t * configflash = 0;
+  CPU_TS ts;
   
   sFLASH_ReadBuffer((uint8_t *)&meter_count,block_cjq+18,2);
   sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
@@ -1917,60 +1969,67 @@ uint32_t delete_cjq(uint32_t block_cjq){
   //将采集器删除
   PutFlash(block_cjq);
   
-  configflash = OSMemGet(&MEM_Buf,&err);
+  OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  if(err != OS_ERR_NONE){
+    //获取MUTEX过程中 出错了...
+    //return 0xFFFFFF;
+  }
   
   if(cjq_count == 0){
     //这个采集器是唯一的一个   block_before、block_after  都为0xFFFFFF
-    sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(configflash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_after,3);
-    Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-    Mem_Copy(configflash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_before,3);
-    sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_after,3);
+    Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+    Mem_Copy(config_flash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_before,3);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
   }else{
     if(block_before == 0xFFFFFF || block_after == 0xFFFFFF){
       //要删除的这个是第一个  或者是最后一个
       if(block_before == 0xFFFFFF){
         //修改后一个的before 为block_before
-        sFLASH_ReadBuffer(configflash,block_after,256);
-        Mem_Copy(configflash + 20,(uint8_t *)&block_before,3);
-        sFLASH_EraseWritePage(configflash,block_after,256);
-        
-        sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-        Mem_Copy(configflash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_after,3);
-        Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-        sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+        sFLASH_ReadBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_after%0x1000 + 20,(uint8_t *)&block_before,3);
+        sFLASH_EraseSector((block_after/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+        //修改采集器Q的start 为block_after  更新采集器数量
+        sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+        Mem_Copy(config_flash + (sFLASH_CJQ_Q_START - sFLASH_CON_START_ADDR),(uint8_t *)&block_after,3);
+        Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+        sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
       }
       
       if(block_after == 0xFFFFFF){
         //修改前一个的next 为block_after
-        sFLASH_ReadBuffer(configflash,block_before,256);
-        Mem_Copy(configflash + 3,(uint8_t *)&block_after,3);
-        sFLASH_EraseWritePage(configflash,block_before,256);
-        
-        sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-        Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-        Mem_Copy(configflash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_before,3);
-        sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+        sFLASH_ReadBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        Mem_Copy(config_flash+block_before%0x1000 + 3,(uint8_t *)&block_after,3);
+        sFLASH_EraseSector((block_before/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+        //修改采集器Q的end 为block_before  更新采集器数量
+        sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+        Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+        Mem_Copy(config_flash + (sFLASH_CJQ_Q_LAST - sFLASH_CON_START_ADDR),(uint8_t *)&block_before,3);
+        sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
       }
       
     }else{
       //要删除的这个在中间
       //修改前一个的next 为block_after
-      sFLASH_ReadBuffer(configflash,block_before,256);
-      Mem_Copy(configflash + 3,(uint8_t *)&block_after,3);
-      sFLASH_EraseWritePage(configflash,block_before,256);
+      sFLASH_ReadBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+      Mem_Copy(config_flash+block_before%0x1000 + 3,(uint8_t *)&block_after,3);
+      sFLASH_EraseSector((block_before/0x1000)*0x1000);
+      sFLASH_WriteBuffer(config_flash,(block_before/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
       //修改后一个的before 为block_before
-      sFLASH_ReadBuffer(configflash,block_after,256);
-      Mem_Copy(configflash + 20,(uint8_t *)&block_before,3);
-      sFLASH_EraseWritePage(configflash,block_after,256);
-      
+      sFLASH_ReadBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+      Mem_Copy(config_flash+block_after%0x1000 + 20,(uint8_t *)&block_before,3);
+      sFLASH_EraseSector((block_after/0x1000)*0x1000);
+      sFLASH_WriteBuffer(config_flash,(block_after/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
       //修改control blocks
-      sFLASH_ReadBuffer(configflash,sFLASH_CON_START_ADDR,256);
-      Mem_Copy(configflash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
-      sFLASH_EraseWritePage(configflash,sFLASH_CON_START_ADDR,256);
+      sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+      Mem_Copy(config_flash + (sFLASH_CJQ_COUNT - sFLASH_CON_START_ADDR),(uint8_t *)&cjq_count,2);
+      sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
     }
   }
-  OSMemPut(&MEM_Buf,configflash,&err);
+  OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
   return block_cjq;
 }
 
@@ -2007,7 +2066,6 @@ void Task_LED1(void *p_arg){
   OS_ERR err;
   //CPU_TS ts;
   
-  //uint8_t * configflash;
   //uint8_t y;
   //uint8_t *yy;
   
