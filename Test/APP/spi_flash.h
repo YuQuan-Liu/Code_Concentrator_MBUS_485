@@ -52,7 +52,7 @@
 #define sFLASH_CON_APN          sFLASH_CON_START_ADDR
 #define sFLASH_CON_USER         sFLASH_CON_START_ADDR + 0x10
 #define sFLASH_CON_PASSWORD     sFLASH_CON_START_ADDR + 0x20
-#define sFLASH_CON_WEB          sFLASH_CON_START_ADDR + 0x30    //使用0x20  只使用了第一个字节  表示连接到那个域名
+#define sFLASH_CON_WEB          sFLASH_CON_START_ADDR + 0x30    //使用0x20 只使用了第一个字节  表示连接到那个域名 //0x00~测试过了~IP   0xFF~未测试~域名（avenger0422.vicp.cc）
 #define sFLASH_CON_IP           sFLASH_CON_START_ADDR + 0x50    //使用0x20
 #define sFLASH_CON_IP1           sFLASH_CON_START_ADDR + 0x70-1    
 #define sFLASH_CON_IP2           sFLASH_CON_START_ADDR + 0x70-2    

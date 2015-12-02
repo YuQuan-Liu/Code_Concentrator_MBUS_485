@@ -167,7 +167,7 @@ void TaskStart(void *p_arg){
     }
   }
   //Open the IWDG;
-  //BSP_IWDG_Init();
+  BSP_IWDG_Init();
   
   while(DEF_TRUE){
     /* Reload IWDG counter */
@@ -216,6 +216,8 @@ void TaskCreate(void){
                (void *) 0,
                (OS_OPT) (OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
                (OS_ERR *)&err);
+  //OS_CFG_TICK_TASK_PRIO == 6 = APP_START_TASK_PRIO + 3
+  
   /*deal the server data */
   OSTaskCreate((OS_TCB  *)&TCB_DealServer,
                (CPU_CHAR *)"deal",

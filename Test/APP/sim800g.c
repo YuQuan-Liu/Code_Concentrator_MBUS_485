@@ -21,7 +21,6 @@ extern volatile uint8_t connectstate;
 extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
 extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 
-uint8_t dns[25] = "\"www.xcxdtech.com\"";     //the server 
 uint8_t ip[17] = "218.28.41.74";                 //the server ip
 uint8_t port[8] = ",3333\r";                     //the server port
 uint8_t deviceaddr[5] = {0x99,0x09,0x00,0x00,0x57};      //设备地址
@@ -331,6 +330,7 @@ ErrorStatus check_xiic(void){
   return ERROR;
 }
 
+extern uint8_t device_test; //0x00~测试过了~IP   0xFF~未测试~域名（avenger0422.vicp.cc）
 ErrorStatus at_tcpsetup(void){
   OS_ERR err;
   
@@ -342,7 +342,15 @@ ErrorStatus at_tcpsetup(void){
   
     Mem_Set(buf_server_,0x00,256); //clear the buf
     Server_WriteStr(ats[10]);
-    Server_WriteStr(dns);
+    
+    //测试为通过连接测试域名  
+    //正式使用时连接IP  地址
+    if(device_test == 0xFF){
+      Server_WriteStr(TEST_DNS);
+    }else{
+      Server_WriteStr(ip);
+    }
+    
     Server_WriteStr(port);
     
     Server_Post2Buf(buf_server);  //接收数据到buf_server

@@ -638,8 +638,6 @@ void PutFlash(uint32_t put){
 }
 
 
-//uint8_t dns[25] = "\"www.xcxdtech.com\"\r";     //the server 
-extern uint8_t dns[25];     //the server 
 extern uint8_t ip[17];                 //the server ip
 extern uint8_t port[8];                     //the server port
 extern uint8_t deviceaddr[5];      //设备地址
@@ -651,16 +649,13 @@ extern uint8_t ip4;
 extern uint16_t port_;
 
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
-extern uint8_t device_test; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~avenger0422.vicp.cc
+extern uint8_t device_test; //0x00~测试过了~IP   0xFF~未测试~域名（avenger0422.vicp.cc）
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
 void param_conf(void){
   
   uint8_t temp[2] = {0x00,0x00};
   
   sFLASH_ReadBuffer(&device_test,sFLASH_CON_WEB,1);
-  if(device_test == 0xFF){
-    Mem_Copy(dns,TEST_DNS,25);
-  }
   
   temp[0] = 0x00;
   sFLASH_ReadBuffer(temp,sFLASH_CON_IP,1);
