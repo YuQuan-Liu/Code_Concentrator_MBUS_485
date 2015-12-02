@@ -25,10 +25,10 @@ uint8_t ip[17] = "218.28.41.74";                 //the server ip
 uint8_t port[8] = ",3333\r";                     //the server port
 uint8_t deviceaddr[5] = {0x99,0x09,0x00,0x00,0x57};      //Éè±¸µØÖ·
 
-uint8_t ip1 = 74;
-uint8_t ip2 = 41;
-uint8_t ip3 = 28;
-uint8_t ip4 = 218;
+uint8_t ip1 = 218;
+uint8_t ip2 = 28;
+uint8_t ip3 = 41;
+uint8_t ip4 = 74;
 uint16_t port_ = 3333;
 
 u8 *ats[20]={

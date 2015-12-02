@@ -2553,10 +2553,10 @@ void ack_query_ip(uint8_t desc,uint8_t server_seq_){
   *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
   *buf_frame++ = FN_IP_PORT;
   
-  *buf_frame++ = ip1;
-  *buf_frame++ = ip2;
-  *buf_frame++ = ip3;
   *buf_frame++ = ip4;
+  *buf_frame++ = ip3;
+  *buf_frame++ = ip2;
+  *buf_frame++ = ip1;
   
   buf_frame_16 = (uint16_t *)buf_frame;
   *buf_frame_16++ = port_;
