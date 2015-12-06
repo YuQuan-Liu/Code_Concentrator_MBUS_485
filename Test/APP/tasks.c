@@ -1314,12 +1314,17 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     if(success == 0){
       //开阀失败  存flash  return nack
       //Mem_Copy(configflash + 22,"\x43",1);  //超时
-      *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
-      
+      if((st_l & 0x03) == 0x03){
+        //阀门返回异常
+        *(config_flash+block_meter%0x1000 + 22) = 0x03;
+      }else{
+        //超时
+        *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
+      }
       //device_nack(desc,server_seq_);
     }else{
       //开
-      *(config_flash+block_meter%0x1000 + 22) = 0x00;
+      *(config_flash+block_meter%0x1000 + 22) = st_l;
       device_ack(desc,server_seq_);   //return nack;
     }
     
@@ -1376,12 +1381,17 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
         //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
         //me：协议中指的是D1 = 1
         //骏普：D0 = 1 为关
-        if((st_l & 0x02) == 0x02 | (st_l & 0x01) == 0x01){
-          //opened  return ack
-          success = 1;
-        }else{
+        if((st_l & 0x03) == 0x03){
           //开阀失败  存flash  return nack
           success = 0;
+        }else{
+          if((st_l & 0x02) == 0x02 | (st_l & 0x01) == 0x01){
+            //opened  return ack
+            success = 1;
+          }else{
+            //开阀失败  存flash  return nack
+            success = 0;
+          }
         }
       }
       OSMemPut(&MEM_Buf,buf_readdata,&err);
@@ -1399,10 +1409,17 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     if(success == 0){
       //开阀失败  存flash  return nack
       //Mem_Copy(configflash + 22,"\x43",1);  //超时
-      *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
+      if((st_l & 0x03) == 0x03){
+        //开阀失败  存flash  return nack
+        //阀门坏
+        *(config_flash+block_meter%0x1000 + 22) = 0x03;
+      }else{
+        //超时
+        *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
+      }
       //device_nack(desc,server_seq_);  //return nack;
     }else{
-      *(config_flash+block_meter%0x1000 + 22) = 0x02;  //关阀
+      *(config_flash+block_meter%0x1000 + 22) = st_l;  //关阀
       device_ack(desc,server_seq_);   //return ack;
     }
     
@@ -2734,8 +2751,8 @@ void Task_OverLoad(void *p_arg){
                 &ts,
                 &err);
     
-    OSTimeDlyHMSM(0,0,0,200,
-                  OS_OPT_TIME_HMSM_STRICT,
+    OSTimeDly(500,
+                  OS_OPT_TIME_DLY,
                   &err);
     if(!GPIO_ReadInputDataBit(GPIOA,GPIO_Pin_0)){
       //enable the beep
@@ -2746,13 +2763,13 @@ void Task_OverLoad(void *p_arg){
       
       while(DEF_TRUE){
         GPIO_SetBits(GPIOB,GPIO_Pin_9);
-        OSTimeDlyHMSM(0,0,0,100,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(100,
+                  OS_OPT_TIME_DLY,
+                  &err);
         GPIO_ResetBits(GPIOB,GPIO_Pin_9);
-        OSTimeDlyHMSM(0,0,0,100,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(100,
+                  OS_OPT_TIME_DLY,
+                  &err);
       }
     }
     
