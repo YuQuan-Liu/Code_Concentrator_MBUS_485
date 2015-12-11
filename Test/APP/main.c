@@ -59,6 +59,7 @@ uint8_t config_flash[0x1000];
 
 //OS_MUTEXs;
 OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
+OS_MUTEX MUTEX_SENDSERVER;    //是否可以发送数据到服务器
 
 //OS_SEMs ;
 
@@ -79,8 +80,6 @@ OS_Q Q_Config;         //配置任务Queue
 OS_Q Q_Deal;         //处理接收到的服务器发送过来的数据
 
 
-
-
 //OS_FLAG
 OS_FLAG_GRP FLAG_Event;
 
@@ -88,8 +87,8 @@ OS_FLAG_GRP FLAG_Event;
 volatile uint8_t connectstate = 0;       //0 didn't connect to the server   1 connect to the server
 volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
 
-uint8_t slave_mbus = 0xff; //0xaa mbus   0xff  485
-uint8_t device_test = 0xFF; //0x00~测试过了~www.xcxdtech.com   0xFF~未测试~avenger0422.vicp.cc
+uint8_t slave_mbus = 0xaa; //0xaa~mbus   0xff~485   0xbb~采集器
+uint8_t device_test = 0xFF; //0x00~测试过了~IP地址    0xFF~未测试~avenger0422.vicp.cc
 uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 
 
@@ -130,7 +129,6 @@ void TaskStart(void *p_arg){
   uint8_t test = 0;////
   uint8_t test_write = 0;////
   uint32_t sectionaddr = 0x1FF000;////
-  uint32_t iwdg_count =0;
   
   BSP_Init();
   
@@ -175,12 +173,12 @@ void TaskStart(void *p_arg){
     
     
     GPIO_SetBits(GPIOB,GPIO_Pin_7);
-    OSTimeDlyHMSM(0,0,1,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+    OSTimeDly(1000,
+                  OS_OPT_TIME_DLY,
                   &err);
     GPIO_ResetBits(GPIOB,GPIO_Pin_7);
-    OSTimeDlyHMSM(0,0,1,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+    OSTimeDly(1000,
+                  OS_OPT_TIME_DLY,
                   &err);
   }
 }
@@ -334,6 +332,7 @@ void ObjCreate(void){
   //OS_MUTEX;
   //OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
   OSMutexCreate(&MUTEX_CONFIGFLASH,"",&err);
+  OSMutexCreate(&MUTEX_SENDSERVER,"",&err);
   
   //OS_SEM
   OSSemCreate(&SEM_ServerTX,

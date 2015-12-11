@@ -30,7 +30,11 @@ extern volatile uint8_t reading;
 extern volatile uint8_t connectstate; 
 extern uint8_t deviceaddr[5];
 
-extern uint8_t slave_mbus; //0xaa mbus   0xff  485
+extern uint8_t slave_mbus; //0xaa mbus   0xff  485   0xBB~采集器
+
+extern uint8_t config_flash[];  //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
+extern OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
+extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 
 uint8_t heart_seq = 0;  //记录心跳的序列号 等待ack
 uint8_t data_seq = 0;  //记录数据的序列号 等待ack
@@ -43,6 +47,11 @@ uint8_t fe[4] = {0xFE,0xFE,0xFE,0xFE};  //抄表时前面发送的4个0xFE
 uint8_t * volatile buf = 0;   //the buf used put the data in 
 uint8_t * volatile buf_;       //keep the buf's ptr  used to release the buf
 uint8_t start_slave = 0;
+
+
+uint8_t readingall = 0;   //是否正在抄全部表
+uint8_t readingall_progress = 0;  //正在抄全部表的进度情况
+
 void Task_Slave(void *p_arg){
   OS_ERR err;
   CPU_TS ts;
@@ -213,14 +222,6 @@ void Task_Slave(void *p_arg){
     }
   }
 }
-
-void Tmr_SlaveCallBack(OS_TMR *p_tmr, void *p_arg){
-  
-  buf = buf_;
-  start_slave = 0;
-  
-}
-
 
 
 uint8_t check_cs(uint8_t * start,uint16_t len){
@@ -539,15 +540,15 @@ void Task_HeartBeat(void *p_arg){
         }
       }
       if(heart_ack){
-        OSTimeDlyHMSM(0,2,0,0,
-                    OS_OPT_TIME_HMSM_STRICT,
+        OSTimeDly(120000,
+                    OS_OPT_TIME_DLY,
                     &err);
       }else{
         change_connect(0);
       }
     }else{
-      OSTimeDlyHMSM(0,0,0,100,
-                    OS_OPT_TIME_HMSM_STRICT,
+      OSTimeDly(100,
+                    OS_OPT_TIME_DLY,
                     &err);
     }
   }
@@ -608,8 +609,8 @@ uint8_t mbus_power(FunctionalState NewState){
   if(NewState != DISABLE){
     
     GPIO_SetBits(GPIOC,GPIO_Pin_13);
-    OSTimeDlyHMSM(0,0,1,500,
-                  OS_OPT_TIME_HMSM_STRICT,
+    OSTimeDly(1500,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOC,GPIO_Pin_13);
@@ -622,8 +623,8 @@ uint8_t relay_485(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOA,GPIO_Pin_6);
-   OSTimeDlyHMSM(0,0,0,600,
-                  OS_OPT_TIME_HMSM_STRICT,
+   OSTimeDly(600,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOA,GPIO_Pin_6);
@@ -635,8 +636,8 @@ uint8_t relay_1(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_2);
-   OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+   OSTimeDly(3000,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_2);
@@ -646,8 +647,8 @@ uint8_t relay_2(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_1);
-   OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+   OSTimeDly(3000,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_1);
@@ -657,8 +658,8 @@ uint8_t relay_3(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOB,GPIO_Pin_0);
-   OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+   OSTimeDly(3000,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_0);
@@ -668,8 +669,8 @@ uint8_t relay_4(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
    GPIO_SetBits(GPIOA,GPIO_Pin_7);
-   OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
+   OSTimeDly(3000,
+                  OS_OPT_TIME_DLY,
                   &err);
   }else{
     GPIO_ResetBits(GPIOA,GPIO_Pin_7);
@@ -689,7 +690,7 @@ uint8_t relay_4(FunctionalState NewState){
 */
 void meter_read(uint8_t * buf_frame,uint8_t desc){
   OS_ERR err;
-  
+  CPU_TS ts;
   uint32_t block_cjq = 0;   //cjq block 地址
   uint32_t block_meter = 0;  //meter block 地址
   
@@ -717,25 +718,48 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   Device_Read(ENABLE);
   if(Mem_Cmp(buf_frame+16,"\xFF\xFF\xFF\xFF\xFF\xFF\xFF",7) == DEF_YES){
     //抄全部表
+    readingall = 1;
     /**/
     for(i = 0;i < cjq_count;i++){
       sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
       sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
       sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
       
-      cjq_open(cjq_addr,block_cjq);
+      if(cjq_open(cjq_addr,block_cjq) == 0){
+        //没有打开采集器
+        OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
       
-      for(j=0;j < cjqmeter_count;j++){
-        sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
-        sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
+        if(err != OS_ERR_NONE){
+          //获取MUTEX过程中 出错了...
+          //return 0xFFFFFF;
+        }
+        for(j=0;j < cjqmeter_count;j++){
+          sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+          *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
+          
+          //将配置好的Flash块重新写入到Flash中。
+          sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+          sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+          
+          sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
+        }
         
-        meter_read_single(meter_addr,block_meter,meter_type,desc);
-        sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
+        OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+      }else{
+        for(j=0;j < cjqmeter_count;j++){
+          sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
+          sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
+          
+          meter_read_single(meter_addr,block_meter,meter_type,desc);
+          sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
+        }
+        cjq_close(cjq_addr,block_cjq);
       }
       
-      cjq_close(cjq_addr,block_cjq);
+      readingall_progress = (i+1)/cjq_count;  //抄全部表时主动上报的进度  当前第几个采集器/采集器数量
       sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
     }
+    readingall = 0;
     meter_send(1,0,desc);
   }else{
     //抄单个表
@@ -749,14 +773,28 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
         
         if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
           //找到这个表了。。。
-          cjq_open(cjq_addr,block_cjq);
+          if(cjq_open(cjq_addr,block_cjq) == 0){
+            //没有打开采集器
+            OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
           
-          meter_read_single(meter_addr,block_meter,meter_type,desc);
-          
-          //send the data;
-          meter_send(0,block_meter,desc);
-          
-          cjq_close(cjq_addr,block_cjq);
+            if(err != OS_ERR_NONE){
+              //获取MUTEX过程中 出错了...
+              //return 0xFFFFFF;
+            }
+            sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+            *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
+            
+            //将配置好的Flash块重新写入到Flash中。
+            sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+            sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+            
+            OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+          }else{
+            meter_read_single(meter_addr,block_meter,meter_type,desc);
+            //send the data;
+            meter_send(0,block_meter,desc);
+            cjq_close(cjq_addr,block_cjq);
+          }
           
           meter_fount = 1; 
           break;
@@ -769,9 +807,6 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   Device_Read(DISABLE);
 }
 
-extern uint8_t config_flash[];  //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
-extern OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
-extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 //只管读表
 void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc){
     OS_ERR err;
@@ -1137,7 +1172,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
 
 void meter_control(uint8_t * buf_frame,uint8_t desc){
   OS_ERR err;
-  
+  CPU_TS ts;
   uint32_t block_cjq = 0;   //cjq block 地址
   uint32_t block_meter = 0;  //meter block 地址
   
@@ -1177,21 +1212,36 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
       if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
         //找到这个表了。。。
         
-        cjq_open(cjq_addr,block_cjq);
-        
-        sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,2);
-        server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
-        switch(*(buf_frame + FN_POSITION)){
-        case FN_OPEN:
-          meter_open(meter_addr,block_meter,meter_type,desc,server_seq_);
-          break;
-        case FN_CLOSE:
-          meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
-          break;
-        }
-        
-        cjq_close(cjq_addr,block_cjq);
+        if(cjq_open(cjq_addr,block_cjq)==0){
+          //没有打开采集器
+            OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
           
+            if(err != OS_ERR_NONE){
+              //获取MUTEX过程中 出错了...
+              //return 0xFFFFFF;
+            }
+            sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+            *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
+            
+            //将配置好的Flash块重新写入到Flash中。
+            sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+            sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+            
+            OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+        }else{
+          sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,2);
+          server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+          switch(*(buf_frame + FN_POSITION)){
+          case FN_OPEN:
+            meter_open(meter_addr,block_meter,meter_type,desc,server_seq_);
+            break;
+          case FN_CLOSE:
+            meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
+            break;
+          }
+          
+          cjq_close(cjq_addr,block_cjq);
+        }
         meter_fount = 1; 
         break;
       }
@@ -1204,7 +1254,16 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
 
 
 uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
-  
+    uint8_t buf_frame_[17];
+    uint8_t * buf_frame = 0;
+    uint8_t i;
+    uint16_t msg_size;
+    uint8_t * buf_readdata;
+    uint8_t success = 0;
+    uint8_t st_l;
+    OS_ERR err;
+    CPU_TS ts;
+    
     if(slave_mbus == 0xAA){
       //mbus ~~~
       switch (cjq_addr[0]){
@@ -1224,10 +1283,83 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
       
       return 1;
     }
+    
+    if(slave_mbus == 0xBB){
+      //采集器 ~~~
+      buf_frame = buf_frame_;
+      *buf_frame++ = FRAME_HEAD;
+      *buf_frame++ = 0xA0;  //采集器标志
+      for(i=0;i<6;i++){
+        *buf_frame++ = cjq_addr[i];
+      }
+      *buf_frame++ = 0x00;  //采集器最高位
+      *buf_frame++ = 0x04; //C
+      *buf_frame++ = 0x04; //len
+      *buf_frame++ = DATAFLAG_WC_L;
+      *buf_frame++ = DATAFLAG_WC_H;
+      *buf_frame++ = 0x01;
+      *buf_frame++ = OPEN_CJQ;
+      *buf_frame++ = check_cs(buf_frame_,11+4);
+      *buf_frame++ = FRAME_END;
+      
+      for(i = 0;success == 0 && i < 2;i++){
+        Slave_Write(buf_frame_,13+4);
+        buf_readdata = OSQPend(&Q_ReadData,4000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+        if(err != OS_ERR_NONE){
+          if(i==1){
+            //开采集器失败  存flash  return nack
+            success = 0;
+          }
+          continue;
+        }
+        //接收到正确的数据
+        //判断表地址
+        if(Mem_Cmp(cjq_addr,buf_readdata+2,6) == DEF_YES){
+          //获取ST
+          st_l = *(buf_readdata + 14);
+          if((st_l & 0x03) == 0x00){
+            //opened  return ack
+            success = 1;
+          }else{
+            //开采集器失败  存flash  return nack
+            success = 0;
+          }
+        }
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
+      }
+      if(success == 0){
+        //开采集器失败  存flash  return nack
+        OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+      
+        if(err != OS_ERR_NONE){
+          //获取MUTEX过程中 出错了...
+          //return 0xFFFFFF;
+        }
+        
+        sFLASH_ReadBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+        //读表失败  存flash  return nack
+        *(config_flash+block_cjq%0x1000 + 23) = 0x01;
+        
+        //将配置好的Flash块重新写入到Flash中。
+        sFLASH_EraseSector((block_cjq/0x1000)*0x1000);
+        sFLASH_WriteBuffer(config_flash,(block_cjq/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+        
+        OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+      }
+      return success;
+    }
 }
 
 uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
-  
+    uint8_t buf_frame_[17];
+    uint8_t * buf_frame = 0;
+    uint8_t i;
+    uint16_t msg_size;
+    uint8_t * buf_readdata;
+    uint8_t success = 0;
+    uint8_t st_l;
+    OS_ERR err;
+    CPU_TS ts;
     if(slave_mbus == 0xAA){
       //mbus ~~~
       switch (cjq_addr[0]){
@@ -1245,6 +1377,51 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
           break;
       }
       return 1;
+    }
+    if(slave_mbus == 0xBB){
+      //采集器 ~~~
+      buf_frame = buf_frame_;
+      *buf_frame++ = FRAME_HEAD;
+      *buf_frame++ = 0xA0;  //采集器标志
+      for(i=0;i<6;i++){
+        *buf_frame++ = cjq_addr[i];
+      }
+      *buf_frame++ = 0x00;  //采集器最高位
+      *buf_frame++ = 0x04; //C
+      *buf_frame++ = 0x04; //len
+      *buf_frame++ = DATAFLAG_WC_L;
+      *buf_frame++ = DATAFLAG_WC_H;
+      *buf_frame++ = 0x01;
+      *buf_frame++ = CLOSE_CJQ;
+      *buf_frame++ = check_cs(buf_frame_,11+4);
+      *buf_frame++ = FRAME_END;
+      
+      for(i = 0;success == 0 && i < 2;i++){
+        Slave_Write(buf_frame_,13+4);
+        buf_readdata = OSQPend(&Q_ReadData,4000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+        if(err != OS_ERR_NONE){
+          if(i==1){
+            //关采集器失败  存flash  return nack
+            success = 0;
+          }
+          continue;
+        }
+        //接收到正确的数据
+        //判断表地址
+        if(Mem_Cmp(cjq_addr,buf_readdata+2,6) == DEF_YES){
+          //获取ST
+          st_l = *(buf_readdata + 14);
+          if((st_l & 0x03) == 0x02){
+            //closed  return ack
+            success = 1;
+          }else{
+            //开采集器失败  存flash  return nack
+            success = 0;
+          }
+        }
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
+      }
+      return success;
     }
 }
 
@@ -1618,6 +1795,11 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     if(*(buf_frame + DATA_POSITION) == 0xAA){
       //the slave is mbus
       slave_mbus = 0xAA;
+    }
+    
+    if(*(buf_frame + DATA_POSITION) == 0xBB){
+      //the slave is 采集器
+      slave_mbus = 0xBB;
     }
     
     if(*(buf_frame + DATA_POSITION) == 0xFF){
@@ -2077,34 +2259,63 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
   }
 }
 
-extern uint8_t dns[];
-extern OS_SEM SEM_ServerTX;
 void Task_LED1(void *p_arg){
   OS_ERR err;
-  //CPU_TS ts;
-  
-  //uint8_t y;
-  //uint8_t *yy;
+  uint8_t cnt = 0;
+  uint8_t readingbeat[17];  //抄全部表时的心跳
+  uint8_t *buf_frame = 0;
   
   while(DEF_TRUE){
     if(reading == 0){
       GPIO_SetBits(GPIOB,GPIO_Pin_6);
-      OSTimeDlyHMSM(0,0,1,0,
-                    OS_OPT_TIME_HMSM_STRICT,
+      OSTimeDly(1000,
+                    OS_OPT_TIME_DLY,
                     &err);
       GPIO_ResetBits(GPIOB,GPIO_Pin_6);
-      OSTimeDlyHMSM(0,0,1,0,
-                    OS_OPT_TIME_HMSM_STRICT,
+      OSTimeDly(1000,
+                    OS_OPT_TIME_DLY,
                     &err);
+      cnt = 0;
     }else{
       GPIO_SetBits(GPIOB,GPIO_Pin_6);
-      OSTimeDlyHMSM(0,0,0,300,
-                    OS_OPT_TIME_HMSM_STRICT,
+      OSTimeDly(300,
+                    OS_OPT_TIME_DLY,
                     &err);
       GPIO_ResetBits(GPIOB,GPIO_Pin_6);
-      OSTimeDlyHMSM(0,0,0,300,
-                    OS_OPT_TIME_HMSM_STRICT,
+      OSTimeDly(300,
+                    OS_OPT_TIME_DLY,
                     &err);
+      if(readingall){
+        cnt++;
+        if(cnt >= 15){
+          cnt = 0;
+          buf_frame = readingbeat;
+          *buf_frame++ = FRAME_HEAD;
+          //buf_frame_16 = (uint16_t *)buf_frame;
+          *buf_frame++ = 0x27;//(9 << 2) | 0x03;
+          *buf_frame++ = 0x00;
+          *buf_frame++ = 0x27;//(9 << 2) | 0x03;
+          *buf_frame++ = 0x00;
+          //buf_frame = (uint8_t *)buf_frame_16;
+          *buf_frame++ = FRAME_HEAD;
+          
+          *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_START | START_FUN_REQ1;
+          /**/
+          *buf_frame++ = deviceaddr[0];
+          *buf_frame++ = deviceaddr[1];
+          *buf_frame++ = deviceaddr[2];
+          *buf_frame++ = deviceaddr[3];
+          *buf_frame++ = deviceaddr[4];
+          
+          *buf_frame++ = AFN_FAKE;
+          *buf_frame++ = ZERO_BYTE |SINGLE | local_seq;
+          *buf_frame++ = readingall_progress;//FN_HEARTBEAT;
+          
+          *buf_frame++ = check_cs(readingbeat+6,9);
+          *buf_frame++ = FRAME_END;
+          send_server(readingbeat,17);
+        }
+      }
     }
   }
 }

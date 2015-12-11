@@ -52,9 +52,7 @@ uint8_t relay_3(FunctionalState NewState);
 uint8_t relay_4(FunctionalState NewState);
 
 //tasks
-void Tmr_SlaveCallBack(OS_TMR *p_tmr, void *p_arg);
 void Task_Slave(void *p_arg);
-void Tmr_ServerCallBack(OS_TMR *p_tmr, void *p_arg);
 void Task_Server(void *p_arg);
 void Task_DealServer(void *p_arg);
 void Task_Connect(void *p_arg);

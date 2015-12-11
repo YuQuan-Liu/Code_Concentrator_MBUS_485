@@ -38,7 +38,7 @@
 #define AFN_QUERY                   0x0A
 #define AFN_CURRENT                 0x0B
 #define AFN_HISTORY                 0x0C
-
+#define AFN_FAKE                 0x0F
 
 
 

@@ -374,10 +374,13 @@ ErrorStatus at_tcpsetup(void){
 the send is the pointer to the data 
 the count is the number of the data
 */
+extern OS_MUTEX MUTEX_SENDSERVER;    //是否可以发送数据到服务器
 ErrorStatus send_server(uint8_t * send,uint16_t count){
   CPU_TS ts;
   OS_ERR err;
   uint8_t sendcount[5];
+  
+  OSMutexPend(&MUTEX_SENDSERVER,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
   
   //send the data
   sprintf(sendcount,"%d",count);
@@ -398,6 +401,8 @@ ErrorStatus send_server(uint8_t * send,uint16_t count){
   }
   
   Server_Write(send,count);
+  
+  OSMutexPost(&MUTEX_SENDSERVER,OS_OPT_POST_NONE,&err);
   /*
   OSSemPend(&SEM_SendOver,
             1000,
