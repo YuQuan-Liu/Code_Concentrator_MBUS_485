@@ -1304,7 +1304,7 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
       
       for(i = 0;success == 0 && i < 2;i++){
         Slave_Write(buf_frame_,13+4);
-        buf_readdata = OSQPend(&Q_ReadData,4000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+        buf_readdata = OSQPend(&Q_ReadData,5000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
         if(err != OS_ERR_NONE){
           if(i==1){
             //¿ª²É¼¯Æ÷Ê§°Ü  ´æflash  return nack
