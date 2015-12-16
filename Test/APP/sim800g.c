@@ -39,7 +39,8 @@ u8 *ats[20]={
 	"AT+CREG?\r",  //检查网络注册状态
 	"AT+CGATT?\r",  //检查GPRS附着状态
 	"AT+CIPMUX=1\r",  //设置成多链路模式
-	"AT+CSTT=\"CMNET\"\r",  //设置APN
+	"AT+CSTT=\"3GWAP\"\r",  //设置APN
+        //"AT+CSTT=\"CMNET\"\r",  //设置APN
 	"AT+CIICR\r",   //建立PPP连接
 	"AT+CIFSR\r",    //获取本地IP地址
 	"AT+CIPSTART=0,\"TCP\",",   //+ip+port 建立TCP连接
@@ -160,7 +161,8 @@ ErrorStatus at_csq(void){
       rssi = atoi(rssi_ptr);
       ber_ptr = Str_Char_N(buf_server_,256,',')+1;
       ber = atoi(ber_ptr);
-      if(rssi > 5 && ber != 99){
+      //if(rssi > 5 && ber != 99){
+      if(rssi > 5){
         good++;
         if(good > 6){
           OSMemPut(&MEM_Buf,buf_server_,&err);
