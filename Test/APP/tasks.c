@@ -86,12 +86,16 @@ void Task_Slave(void *p_arg){
     if(buf == 0){
       buf = OSMemGet(&MEM_Buf,
                      &err);
-      if(err != OS_ERR_NONE){
-        asm("NOP");
+      if(err == OS_ERR_NONE){
+        //get the buf
+        buf_ = buf;
+        Mem_Set(buf_,0x00,256); //clear the buf
+      }else{
         //didn't get the buf
+        asm("NOP");
+        continue;
       }
-      buf_ = buf;
-      Mem_Set(buf_,0x00,256); //clear the buf
+      
       
     }
     
@@ -253,13 +257,17 @@ void Task_Server(void *p_arg){
       if(buf_server_task == 0){
         buf_server_task = OSMemGet(&MEM_Buf,
                        &err);
-        buf_server_task_ = buf_server_task;
-        Mem_Set(buf_server_task_,0x00,256); //clear the buf
-        if(err != OS_ERR_NONE){
-          asm("NOP");
+        
+        if(err == OS_ERR_NONE){
+          //get the buf
+          buf_server_task_ = buf_server_task;
+          Mem_Set(buf_server_task_,0x00,256); //clear the buf
+          Server_Post2Buf(buf_server_task_);
+        }else{
           //didn't get the buf
+          asm("NOP");
+          continue;
         }
-        Server_Post2Buf(buf_server_task_);
       }
       
       if(server_ptr - server_ptr_ > 0){
@@ -1158,6 +1166,9 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
             //to 485
             Server_Write_485(buf_frame_,17+14*meter_count_+5);
           }
+          OSTimeDly(100,
+                    OS_OPT_TIME_DLY,
+                    &err);
           
           buf_frame = buf_frame_;
         }
@@ -2629,6 +2640,9 @@ void ack_query_meter(uint8_t metertype,uint8_t * meteraddr,uint8_t desc,uint8_t 
             //to 485
             Server_Write_485(buf_frame_,17+17*meter_count_+1);
           }
+          OSTimeDly(100,
+                    OS_OPT_TIME_DLY,
+                    &err);
           
           buf_frame = buf_frame_;
         }

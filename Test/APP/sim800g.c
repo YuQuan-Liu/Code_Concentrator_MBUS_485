@@ -79,16 +79,18 @@ ErrorStatus ate_(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  Mem_Set(buf_server_,0x00,256); //clear the buf
-  buf_server = Send_ReadATs(ats[1],buf_server_,100);
-  check_str(buf_server_,buf_server);    //屏蔽掉数据前的0x00
-  if(Str_Str(buf_server_,"OK")){
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[1],buf_server_,100);
+    check_str(buf_server_,buf_server);    //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
     OSMemPut(&MEM_Buf,buf_server_,&err);
-    return SUCCESS;
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -108,24 +110,26 @@ ErrorStatus at_cpin(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    if(i != 0){
-      OSTimeDlyHMSM(0,0,0,200,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      if(i != 0){
+        OSTimeDlyHMSM(0,0,0,200,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[2],buf_server_,100);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      //the content +CPIN: READY
+      if(Str_Str(buf_server_,"READY")){
+        OSMemPut(&MEM_Buf,buf_server_,&err);
+        return SUCCESS;
+      }
     }
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[2],buf_server_,100);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    //the content +CPIN: READY
-    if(Str_Str(buf_server_,"READY")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
     
 }
@@ -145,37 +149,39 @@ ErrorStatus at_csq(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    if(i != 0){
-      OSTimeDlyHMSM(0,0,0,200,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
-    }
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[3],buf_server_,100);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"CSQ")){
-      rssi_ptr = Str_Char_N(buf_server_,256,':')+2;
-      rssi = atoi(rssi_ptr);
-      ber_ptr = Str_Char_N(buf_server_,256,',')+1;
-      ber = atoi(ber_ptr);
-      //if(rssi > 5 && ber != 99){
-      if(rssi > 5){
-        good++;
-        if(good > 6){
-          OSMemPut(&MEM_Buf,buf_server_,&err);
-          return SUCCESS;
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      if(i != 0){
+        OSTimeDlyHMSM(0,0,0,200,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[3],buf_server_,100);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      if(Str_Str(buf_server_,"CSQ")){
+        rssi_ptr = Str_Char_N(buf_server_,256,':')+2;
+        rssi = atoi(rssi_ptr);
+        ber_ptr = Str_Char_N(buf_server_,256,',')+1;
+        ber = atoi(ber_ptr);
+        //if(rssi > 5 && ber != 99){
+        if(rssi > 5){
+          good++;
+          if(good > 6){
+            OSMemPut(&MEM_Buf,buf_server_,&err);
+            return SUCCESS;
+          }
+        }else{
+          good = 0;
         }
       }else{
         good = 0;
       }
-    }else{
-      good = 0;
     }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -188,23 +194,25 @@ ErrorStatus at_creg(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    if(i != 0){
-      OSTimeDlyHMSM(0,0,0,200,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      if(i != 0){
+        OSTimeDlyHMSM(0,0,0,200,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[4],buf_server_,100);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      if(Str_Str(buf_server_,"+CREG: 0,1") || Str_Str(buf_server_,"+CREG: 0,5")){
+        OSMemPut(&MEM_Buf,buf_server_,&err);
+        return SUCCESS;
+      }
     }
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[4],buf_server_,100);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"+CREG: 0,1") || Str_Str(buf_server_,"+CREG: 0,5")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -217,23 +225,25 @@ ErrorStatus check_cgatt(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    if(i != 0){
-      OSTimeDlyHMSM(0,0,0,200,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      if(i != 0){
+        OSTimeDlyHMSM(0,0,0,200,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[5],buf_server_,100);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      if(Str_Str(buf_server_,"+CGATT: 1")){
+        OSMemPut(&MEM_Buf,buf_server_,&err);
+        return SUCCESS;
+      }
     }
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[5],buf_server_,100);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"+CGATT: 1")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -245,16 +255,18 @@ ErrorStatus at_cipmux(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  Mem_Set(buf_server_,0x00,256); //clear the buf
-  buf_server = Send_ReadATs(ats[6],buf_server_,100);
-  check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-  if(Str_Str(buf_server_,"OK")){
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[6],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
     OSMemPut(&MEM_Buf,buf_server_,&err);
-    return SUCCESS;
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -265,16 +277,18 @@ ErrorStatus at_apn(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  Mem_Set(buf_server_,0x00,256); //clear the buf
-  buf_server = Send_ReadATs(ats[7],buf_server_,100);
-  check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-  if(Str_Str(buf_server_,"OK")){
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    Mem_Set(buf_server_,0x00,256); //clear the buf
+    buf_server = Send_ReadATs(ats[7],buf_server_,100);
+    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+    if(Str_Str(buf_server_,"OK")){
+      OSMemPut(&MEM_Buf,buf_server_,&err);
+      return SUCCESS;
+    }
     OSMemPut(&MEM_Buf,buf_server_,&err);
-    return SUCCESS;
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -288,18 +302,20 @@ ErrorStatus at_xiic(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[8],buf_server_,2000);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,"OK")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[8],buf_server_,2000);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      if(Str_Str(buf_server_,"OK")){
+        OSMemPut(&MEM_Buf,buf_server_,&err);
+        return SUCCESS;
+      }
     }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
   return ERROR;
 }
 
@@ -312,23 +328,26 @@ ErrorStatus check_xiic(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
-  
-  for(i = 0;i < 100;i++){
-    if(i != 0){
-      OSTimeDlyHMSM(0,0,0,200,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
+    
+    for(i = 0;i < 100;i++){
+      if(i != 0){
+        OSTimeDlyHMSM(0,0,0,200,
+                      OS_OPT_TIME_HMSM_STRICT,
+                      &err);
+      }
+      Mem_Set(buf_server_,0x00,256); //clear the buf
+      buf_server = Send_ReadATs(ats[9],buf_server_,100);
+      check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
+      if(Str_Str(buf_server_,".")){
+        OSMemPut(&MEM_Buf,buf_server_,&err);
+        return SUCCESS;
+      }
     }
-    Mem_Set(buf_server_,0x00,256); //clear the buf
-    buf_server = Send_ReadATs(ats[9],buf_server_,100);
-    check_str(buf_server_,buf_server);  //屏蔽掉数据前的0x00
-    if(Str_Str(buf_server_,".")){
-      OSMemPut(&MEM_Buf,buf_server_,&err);
-      return SUCCESS;
-    }
+    OSMemPut(&MEM_Buf,buf_server_,&err);
   }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
+  
   return ERROR;
 }
 
@@ -340,7 +359,8 @@ ErrorStatus at_tcpsetup(void){
   uint8_t * buf_server_ = 0;
   
   buf_server = OSMemGet(&MEM_Buf,&err);
-  buf_server_ = buf_server;
+  if(err == OS_ERR_NONE){
+    buf_server_ = buf_server;
   
     Mem_Set(buf_server_,0x00,256); //clear the buf
     Server_WriteStr(ats[10]);
@@ -367,7 +387,8 @@ ErrorStatus at_tcpsetup(void){
       OSMemPut(&MEM_Buf,buf_server_,&err);
       return SUCCESS;
     }
-  OSMemPut(&MEM_Buf,buf_server_,&err);
+    OSMemPut(&MEM_Buf,buf_server_,&err);
+  }
   return ERROR;
     
 }
