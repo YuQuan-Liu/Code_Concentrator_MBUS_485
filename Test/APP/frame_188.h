@@ -75,7 +75,7 @@
 #define   DATAFLAG_WG_L     0x95
 //write cjq
 #define   DATAFLAG_WC_H     0xA0
-#define   DATAFLAG_WC_L     0x90
+#define   DATAFLAG_WC_L     0x17
 //write valve
 #define   DATAFLAG_WV_H     0xA0
 #define   DATAFLAG_WV_L     0x17
