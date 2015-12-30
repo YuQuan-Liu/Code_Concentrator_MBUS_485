@@ -711,7 +711,6 @@ void meter_read(uint8_t * buf_frame,uint8_t desc){
   uint8_t cjq_addr[6];
   uint8_t meter_addr[7];
   uint8_t meter_type = 0;
-  uint8_t meter_status[2];
   
   uint8_t meter_fount = 0;
   //查询是否有这个表
@@ -828,6 +827,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
+    uint8_t st_h = 0;
     uint8_t * buf_frame = 0;
     
     buf_frame = buf_frame_;
@@ -874,6 +874,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
         success = 1;
         //获取ST
         st_l = *(buf_readdata + 31);
+        st_h = *(buf_readdata + 32);
         for(j = 0;j < 4;j++){
           read[j] = *(buf_readdata + 14 + j);
           half[j] = *(buf_readdata + 19 + j);
@@ -896,6 +897,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
     }else{
       Mem_Copy(config_flash+block_meter%0x1000 + 22,&st_l,1);  //记录st信息
+      Mem_Copy(config_flash+block_meter%0x1000 + 23,&st_h,1);  //记录st信息
       Mem_Copy(config_flash+block_meter%0x1000 + 14,read,4);        //读数
       Mem_Copy(config_flash+block_meter%0x1000 + 24,half,4);        //半位
     }
@@ -930,7 +932,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
   uint32_t block_meter = 0;
   
   uint8_t meter_type = 0;   //表的类型
-  uint8_t meter_status = 0; //表的状态
+  uint8_t st_l = 0; //表的状态
+  uint8_t st_h = 0; //表的状态
   
   uint16_t i = 0;       //计数采集器
   uint16_t j = 0;       //计数采集器下的表
@@ -956,7 +959,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
     sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
     sFLASH_ReadBuffer((uint8_t *)&meter_read,block_meter+14,4);
-    sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,1);
+    sFLASH_ReadBuffer((uint8_t *)&st_l,block_meter+22,1);
+    sFLASH_ReadBuffer((uint8_t *)&st_h,block_meter+23,1);
     
     *buf_frame++ = FRAME_HEAD;
     buf_frame_16 = (uint16_t *)buf_frame;
@@ -994,8 +998,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
     for(i=0;i<4;i++){
       *buf_frame++ = meter_read[i];
     }
-    *buf_frame++ = meter_status;
-    *buf_frame++ = 0x00;
+    *buf_frame++ = st_l;
+    *buf_frame++ = st_h;
     
     *buf_frame++ = check_cs(buf_frame_+6,28);
     *buf_frame++ = FRAME_END;
@@ -1040,7 +1044,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
         sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
         sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
         sFLASH_ReadBuffer((uint8_t *)&meter_read,block_meter+14,4);
-        sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,1);
+        sFLASH_ReadBuffer((uint8_t *)&st_l,block_meter+22,1);
+        sFLASH_ReadBuffer((uint8_t *)&st_h,block_meter+23,1);
         
         if(header == 0){
           header = 1;
@@ -1137,8 +1142,8 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
         for(k=0;k<4;k++){
           *buf_frame++ = meter_read[k];
         }
-        *buf_frame++ = meter_status;
-        *buf_frame++ = 0x00;
+        *buf_frame++ = st_l;
+        *buf_frame++ = st_h;
         
         meter_count--;
         if(meter_count == 0){
@@ -1196,7 +1201,6 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
   uint8_t cjq_addr[6];
   uint8_t meter_addr[7];
   uint8_t meter_type = 0;
-  uint8_t meter_status[2];
   
   uint8_t meter_fount = 0;
   uint8_t server_seq_ = 0;  
@@ -1240,7 +1244,6 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
             
             OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
         }else{
-          sFLASH_ReadBuffer((uint8_t *)&meter_status,block_meter+22,2);
           server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
           switch(*(buf_frame + FN_POSITION)){
           case FN_OPEN:
@@ -1445,6 +1448,7 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
+    uint8_t st_h = 0;
     uint8_t * buf_frame = 0;
     
     buf_frame = buf_frame_;
@@ -1479,6 +1483,7 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
         //获取ST
         st_l = *(buf_readdata + 14);
+        st_h = *(buf_readdata + 15);
         if((st_l & 0x03) == 0x00){
           //opened  return ack
           success = 1;
@@ -1504,7 +1509,8 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       //Mem_Copy(configflash + 22,"\x43",1);  //超时
       if((st_l & 0x03) == 0x03){
         //阀门返回异常
-        *(config_flash+block_meter%0x1000 + 22) = 0x03;
+        *(config_flash+block_meter%0x1000 + 22) = st_l;
+        *(config_flash+block_meter%0x1000 + 23) = st_h;
       }else{
         //超时
         *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
@@ -1513,6 +1519,7 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     }else{
       //开
       *(config_flash+block_meter%0x1000 + 22) = st_l;
+      *(config_flash+block_meter%0x1000 + 23) = st_h;
       device_ack(desc,server_seq_);   //return nack;
     }
     
@@ -1533,6 +1540,7 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     uint8_t * buf_readdata = 0;
     uint8_t success = 0;
     uint8_t st_l = 0;
+    uint8_t st_h = 0;
     uint8_t * buf_frame = 0;  
   
     buf_frame = buf_frame_;
@@ -1566,6 +1574,7 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
         //获取ST
         st_l = *(buf_readdata + 14);
+        st_h = *(buf_readdata + 15);
         //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
         //me：协议中指的是D1 = 1
         //骏普：D0 = 1 为关
@@ -1573,7 +1582,7 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
           //开阀失败  存flash  return nack
           success = 0;
         }else{
-          if((st_l & 0x02) == 0x02 | (st_l & 0x01) == 0x01){
+          if((st_l & 0x02) == 0x02 || (st_l & 0x01) == 0x01){
             //opened  return ack
             success = 1;
           }else{
@@ -1600,7 +1609,8 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       if((st_l & 0x03) == 0x03){
         //开阀失败  存flash  return nack
         //阀门坏
-        *(config_flash+block_meter%0x1000 + 22) = 0x03;
+        *(config_flash+block_meter%0x1000 + 22) = st_l;
+        *(config_flash+block_meter%0x1000 + 23) = st_h;
       }else{
         //超时
         *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
@@ -1608,6 +1618,7 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       //device_nack(desc,server_seq_);  //return nack;
     }else{
       *(config_flash+block_meter%0x1000 + 22) = st_l;  //关阀
+      *(config_flash+block_meter%0x1000 + 23) = st_h;  
       device_ack(desc,server_seq_);   //return ack;
     }
     
