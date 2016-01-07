@@ -292,14 +292,14 @@ ErrorStatus Device_Read(FunctionalState NewState){
 extern OS_FLAG_GRP FLAG_Event;
 void OverLoad(void){
   OS_ERR err;
-  if(EXTI_GetITStatus(EXTI_Line0) != RESET)
+  if(EXTI_GetITStatus(EXTI_Line13) != RESET)
   {
     OSFlagPost(&FLAG_Event,
                OVERLOAD,
                OS_OPT_POST_FLAG_SET,
                &err);
     
-    /* Clear the  EXTI line 0 pending bit */
-    EXTI_ClearITPendingBit(EXTI_Line0);
+    /* Clear the  EXTI line 13 pending bit */
+    EXTI_ClearITPendingBit(EXTI_Line13);
   }
 }

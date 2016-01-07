@@ -138,6 +138,16 @@ void BSP_GPIO_Init(void){
   GPIO_Init(GPIOB,&gpio_init);
   
   //GPIOA
+  //GPIOA 0  DCDC_EN  
+  //GPIOA 1  NET_INT  
+  //GPIOA 4  NET_RST
+  //GPIOA 8  M590E_POWER_CON
+  //GPIOA 11  ON_OFF
+  //GPIOA 12  EMERGOFF  这个现在没用
+  //GPIOA 15  DELAY_1
+  
+  
+  //GPIOA
   //GPIOA 1  M590E_POWER_CON  
   //GPIOA 7  DELAY_4
   //GPIOA 8  485_CONTROL
@@ -158,6 +168,18 @@ void BSP_GPIO_Init(void){
   GPIO_ResetBits(GPIOA,GPIO_Pin_6);
   GPIO_ResetBits(GPIOA,GPIO_Pin_1 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_15);
   
+  //GPIOB
+  //GPIOB 0  NET_CS
+  //GPIOB 1  Relay 485 power  realy5
+  //GPIOB 2  485_CONTROL
+  //GPIOB 3  DELAY_2
+  //GPIOB 4  DELAY_3
+  //GPIOB 5  DELAY_4
+  //GPIOB 6  LED4
+  //GPIOB 7  LED3  OverLoad
+  //GPIOB 8  LED2
+  //GPIOB 9  LED1
+  
   
   //GPIOB
   //GPIOB 7  LED1
@@ -176,6 +198,9 @@ void BSP_GPIO_Init(void){
   GPIO_SetBits(GPIOB,GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_9);
   
   //GPIOC
+  //GPIOC 14 BEEP
+  
+  //GPIOC
   //GPIOC 13  DCDC_EN   0 close the mbus power   1 open the mbus power
   
   gpio_init.GPIO_Pin = GPIO_Pin_13;
@@ -185,15 +210,15 @@ void BSP_GPIO_Init(void){
   
   GPIO_ResetBits(GPIOC,GPIO_Pin_13);
   
-  //GPIOA
-  //GPIOA  0  FEEDBACK  
-  gpio_init.GPIO_Pin = GPIO_Pin_0;
+  //GPIOC
+  //GPIOC 13 FEEDBACK
+  gpio_init.GPIO_Pin = GPIO_Pin_13;
   gpio_init.GPIO_Mode = GPIO_Mode_IPU;
-  GPIO_Init(GPIOA,&gpio_init);
-  GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource0);
+  GPIO_Init(GPIOC,&gpio_init);
+  GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource13);
   
-  /* Configure EXTI0 line */
-  exti_init.EXTI_Line = EXTI_Line0;
+  /* Configure EXTI13 line */
+  exti_init.EXTI_Line = EXTI_Line13;
   exti_init.EXTI_Mode = EXTI_Mode_Interrupt;
   exti_init.EXTI_Trigger = EXTI_Trigger_Falling;  
   exti_init.EXTI_LineCmd = ENABLE;

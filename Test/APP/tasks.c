@@ -2990,19 +2990,19 @@ void Task_OverLoad(void *p_arg){
     OSTimeDly(500,
                   OS_OPT_TIME_DLY,
                   &err);
-    if(!GPIO_ReadInputDataBit(GPIOA,GPIO_Pin_0)){
+    if(!GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_13)){
       //enable the beep
-      GPIO_SetBits(GPIOA,GPIO_Pin_15);
+      GPIO_SetBits(GPIOC,GPIO_Pin_14);
       //disable the mbus power
-      GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+      GPIO_ResetBits(GPIOA,GPIO_Pin_0);
       //Light the LED3
       
       while(DEF_TRUE){
-        GPIO_SetBits(GPIOB,GPIO_Pin_9);
+        GPIO_SetBits(GPIOB,GPIO_Pin_7);
         OSTimeDly(100,
                   OS_OPT_TIME_DLY,
                   &err);
-        GPIO_ResetBits(GPIOB,GPIO_Pin_9);
+        GPIO_ResetBits(GPIOB,GPIO_Pin_7);
         OSTimeDly(100,
                   OS_OPT_TIME_DLY,
                   &err);

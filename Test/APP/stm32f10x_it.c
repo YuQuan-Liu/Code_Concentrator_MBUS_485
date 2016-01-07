@@ -196,7 +196,7 @@ void USART3_IRQHandler(void)
 
 
 
-void EXTI0_IRQHandler(void){
+void EXTI15_10_IRQHandler(void){
   
   OverLoad();
 }
