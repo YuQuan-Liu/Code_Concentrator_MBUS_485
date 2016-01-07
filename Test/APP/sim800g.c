@@ -115,9 +115,9 @@ ErrorStatus at_cpin(void){
     
     for(i = 0;i < 100;i++){
       if(i != 0){
-        OSTimeDlyHMSM(0,0,0,200,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(200,
+               OS_OPT_TIME_DLY,
+               &err);
       }
       Mem_Set(buf_server_,0x00,256); //clear the buf
       buf_server = Send_ReadATs(ats[2],buf_server_,100);
@@ -154,9 +154,9 @@ ErrorStatus at_csq(void){
     
     for(i = 0;i < 100;i++){
       if(i != 0){
-        OSTimeDlyHMSM(0,0,0,200,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(200,
+               OS_OPT_TIME_DLY,
+               &err);
       }
       Mem_Set(buf_server_,0x00,256); //clear the buf
       buf_server = Send_ReadATs(ats[3],buf_server_,100);
@@ -199,9 +199,9 @@ ErrorStatus at_creg(void){
     
     for(i = 0;i < 100;i++){
       if(i != 0){
-        OSTimeDlyHMSM(0,0,0,200,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(200,
+               OS_OPT_TIME_DLY,
+               &err);
       }
       Mem_Set(buf_server_,0x00,256); //clear the buf
       buf_server = Send_ReadATs(ats[4],buf_server_,100);
@@ -230,9 +230,9 @@ ErrorStatus check_cgatt(void){
     
     for(i = 0;i < 100;i++){
       if(i != 0){
-        OSTimeDlyHMSM(0,0,0,200,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(200,
+               OS_OPT_TIME_DLY,
+               &err);
       }
       Mem_Set(buf_server_,0x00,256); //clear the buf
       buf_server = Send_ReadATs(ats[5],buf_server_,100);
@@ -333,9 +333,9 @@ ErrorStatus check_xiic(void){
     
     for(i = 0;i < 100;i++){
       if(i != 0){
-        OSTimeDlyHMSM(0,0,0,200,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
+        OSTimeDly(200,
+               OS_OPT_TIME_DLY,
+               &err);
       }
       Mem_Set(buf_server_,0x00,256); //clear the buf
       buf_server = Send_ReadATs(ats[9],buf_server_,100);
@@ -491,18 +491,18 @@ ErrorStatus Device_Cmd(FunctionalState NewState){
   
   if(NewState != DISABLE){
     //enable the power
-    GPIO_SetBits(GPIOA,GPIO_Pin_1); 
+    GPIO_SetBits(GPIOA,GPIO_Pin_8); 
     //low the on_off
-    GPIO_ResetBits(GPIOA,GPIO_Pin_4);
-    OSTimeDlyHMSM(0,0,1,200,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_11);
+    OSTimeDly(1200,
+               OS_OPT_TIME_DLY,
+               &err);
     //high the on_off
-    GPIO_SetBits(GPIOA,GPIO_Pin_4);
+    GPIO_SetBits(GPIOA,GPIO_Pin_11);
     
-    OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+    OSTimeDly(3000,
+               OS_OPT_TIME_DLY,
+               &err);
     
     while(cnt < 250){
       
@@ -510,19 +510,19 @@ ErrorStatus Device_Cmd(FunctionalState NewState){
         return SUCCESS;
       }
       
-      OSTimeDlyHMSM(0,0,0,100,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+      OSTimeDly(100,
+               OS_OPT_TIME_DLY,
+               &err);
       cnt++;
     }
     
     return ERROR;
   }else{
     //disable the power
-    GPIO_ResetBits(GPIOA,GPIO_Pin_1);
-    OSTimeDlyHMSM(0,0,3,0,
-                  OS_OPT_TIME_HMSM_STRICT,
-                  &err);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_8);
+    OSTimeDly(3000,
+               OS_OPT_TIME_DLY,
+               &err);
     return SUCCESS;
   }
 }

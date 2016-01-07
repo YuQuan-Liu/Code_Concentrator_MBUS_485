@@ -59,7 +59,7 @@ void Task_Connect(void *p_arg);
 void Task_Read(void *p_arg);
 void Task_HeartBeat(void *p_arg);
 void Task_Config(void *p_arg);
-void Task_LED1(void *p_arg);
+void Task_LED(void *p_arg);
 void Task_OverLoad(void *p_arg);
 
 

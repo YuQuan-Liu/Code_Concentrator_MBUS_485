@@ -138,77 +138,47 @@ void BSP_GPIO_Init(void){
   GPIO_Init(GPIOB,&gpio_init);
   
   //GPIOA
-  //GPIOA 0  DCDC_EN  
+  //GPIOA 0  DCDC_EN   L close the mbus power   H open the mbus power
   //GPIOA 1  NET_INT  
-  //GPIOA 4  NET_RST
-  //GPIOA 8  M590E_POWER_CON
-  //GPIOA 11  ON_OFF
+  //GPIOA 4  NET_RST  
+  //GPIOA 8  M590E_POWER_CON  L
+  //GPIOA 11  ON_OFF  L
   //GPIOA 12  EMERGOFF  这个现在没用
-  //GPIOA 15  DELAY_1
-  
-  
-  //GPIOA
-  //GPIOA 1  M590E_POWER_CON  
-  //GPIOA 7  DELAY_4
-  //GPIOA 8  485_CONTROL
-  //GPIOA 15  BEEP   
-  
-  //GPIOA 6  Relay 485 power  realy5
-  //GPIOA 4  ON_OFF
-  //GPIOA 5  EMERGOFF  这个现在没用
+  //GPIOA 15  DELAY_1 L
   /**/
-  gpio_init.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_15 | GPIO_Pin_6 | GPIO_Pin_4 | GPIO_Pin_5;
+  gpio_init.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_8 | GPIO_Pin_11 | GPIO_Pin_12 | GPIO_Pin_15;
   gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
   gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA,&gpio_init);
   
   //GPIOA 15 default is JTDI
   GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
-  
-  GPIO_ResetBits(GPIOA,GPIO_Pin_6);
-  GPIO_ResetBits(GPIOA,GPIO_Pin_1 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_15);
+  GPIO_ResetBits(GPIOA,GPIO_Pin_15);
   
   //GPIOB
   //GPIOB 0  NET_CS
-  //GPIOB 1  Relay 485 power  realy5
-  //GPIOB 2  485_CONTROL
-  //GPIOB 3  DELAY_2
-  //GPIOB 4  DELAY_3
-  //GPIOB 5  DELAY_4
-  //GPIOB 6  LED4
-  //GPIOB 7  LED3  OverLoad
-  //GPIOB 8  LED2
-  //GPIOB 9  LED1
-  
-  
-  //GPIOB
-  //GPIOB 7  LED1
-  //GPIOB 9  LED2
-  //GPIOB 6  LED3   指示2  抄表
-  //GPIOB 5  LED4   指示1  待定
-  //GPIOB 0  DELAY_3
-  //GPIOB 1  DELAY_2
-  //GPIOB 2  DELAY_1
-  
-  gpio_init.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_9;
+  //GPIOB 1  Relay 485 power  realy5   L
+  //GPIOB 2  485_CONTROL   L
+  //GPIOB 3  DELAY_2   L
+  //GPIOB 4  DELAY_3   L
+  //GPIOB 5  DELAY_4   L
+  //GPIOB 6  LED4   L  待定
+  //GPIOB 7  LED3   L  OverLoad
+  //GPIOB 8  LED2   L  抄表指示
+  //GPIOB 9  LED1   L  系统指示
+  gpio_init.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9;
   gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
   gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOB,&gpio_init);
   
-  GPIO_SetBits(GPIOB,GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_9);
-  
   //GPIOC
-  //GPIOC 14 BEEP
-  
-  //GPIOC
-  //GPIOC 13  DCDC_EN   0 close the mbus power   1 open the mbus power
-  
-  gpio_init.GPIO_Pin = GPIO_Pin_13;
+  //GPIOC 14 BEEP  L 
+  gpio_init.GPIO_Pin = GPIO_Pin_14;
   gpio_init.GPIO_Mode = GPIO_Mode_Out_PP;
   gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOC,&gpio_init);
   
-  GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+  GPIO_ResetBits(GPIOC,GPIO_Pin_14);
   
   //GPIOC
   //GPIOC 13 FEEDBACK

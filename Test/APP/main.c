@@ -10,11 +10,8 @@
 OS_TCB  TCB_Start;
 CPU_STK STK_Start[APP_START_TASK_STK_SIZE];
 
-OS_TCB TCB_LED1;
-CPU_STK STK_LED1[APP_START_TASK_STK_SIZE];
-
-OS_TCB TCB_LED2;
-CPU_STK STK_LED2[APP_START_TASK_STK_SIZE];
+OS_TCB TCB_LED;
+CPU_STK STK_LED[APP_START_TASK_STK_SIZE];
 
 //处理服务器发送过来的数据
 OS_TCB TCB_Server;
@@ -171,12 +168,12 @@ void TaskStart(void *p_arg){
     /* Reload IWDG counter */
     IWDG_ReloadCounter();
     
-    
-    GPIO_SetBits(GPIOB,GPIO_Pin_7);
+    //LED1
+    GPIO_SetBits(GPIOB,GPIO_Pin_9);
     OSTimeDly(1000,
                   OS_OPT_TIME_DLY,
                   &err);
-    GPIO_ResetBits(GPIOB,GPIO_Pin_7);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_9);
     OSTimeDly(1000,
                   OS_OPT_TIME_DLY,
                   &err);
@@ -274,12 +271,12 @@ void TaskCreate(void){
                (OS_ERR *)&err);
   //blink the led 1
   /**/
-  OSTaskCreate((OS_TCB  *)&TCB_LED1,
-               (CPU_CHAR *)"LED1",
-               (OS_TASK_PTR )Task_LED1,
+  OSTaskCreate((OS_TCB  *)&TCB_LED,
+               (CPU_CHAR *)"LED",
+               (OS_TASK_PTR )Task_LED,
                (void *) 0,
                (OS_PRIO )APP_START_TASK_PRIO + 8,
-               (CPU_STK *)&STK_LED1[0],
+               (CPU_STK *)&STK_LED[0],
                (CPU_STK_SIZE)APP_START_TASK_STK_SIZE/10,
                (CPU_STK_SIZE)APP_START_TASK_STK_SIZE,
                (OS_MSG_QTY) 0u,

@@ -616,12 +616,12 @@ uint8_t mbus_power(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
     
-    GPIO_SetBits(GPIOC,GPIO_Pin_13);
+    GPIO_SetBits(GPIOA,GPIO_Pin_0);
     OSTimeDly(1500,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOC,GPIO_Pin_13);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_0);
   }
   
 }
@@ -630,12 +630,12 @@ uint8_t relay_485(FunctionalState NewState){
   /**/
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOA,GPIO_Pin_6);
+   GPIO_SetBits(GPIOB,GPIO_Pin_1);
    OSTimeDly(600,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOA,GPIO_Pin_6);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_1);
   }
   
 }
@@ -643,45 +643,45 @@ uint8_t relay_485(FunctionalState NewState){
 uint8_t relay_1(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOB,GPIO_Pin_2);
+   GPIO_SetBits(GPIOA,GPIO_Pin_15);
    OSTimeDly(3000,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOB,GPIO_Pin_2);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_15);
   }
 }
 uint8_t relay_2(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOB,GPIO_Pin_1);
+   GPIO_SetBits(GPIOB,GPIO_Pin_3);
    OSTimeDly(3000,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOB,GPIO_Pin_1);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_3);
   }
 }
 uint8_t relay_3(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOB,GPIO_Pin_0);
+   GPIO_SetBits(GPIOB,GPIO_Pin_4);
    OSTimeDly(3000,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOB,GPIO_Pin_0);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_4);
   }
 }
 uint8_t relay_4(FunctionalState NewState){
   OS_ERR err;
   if(NewState != DISABLE){
-   GPIO_SetBits(GPIOA,GPIO_Pin_7);
+   GPIO_SetBits(GPIOB,GPIO_Pin_5);
    OSTimeDly(3000,
                   OS_OPT_TIME_DLY,
                   &err);
   }else{
-    GPIO_ResetBits(GPIOA,GPIO_Pin_7);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_5);
   }
 }
 
@@ -2281,29 +2281,30 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
   }
 }
 
-void Task_LED1(void *p_arg){
+void Task_LED(void *p_arg){
   OS_ERR err;
   uint8_t cnt = 0;
   uint8_t readingbeat[17];  //抄全部表时的心跳
   uint8_t *buf_frame = 0;
   
   while(DEF_TRUE){
+    //LED2
     if(reading == 0){
-      GPIO_SetBits(GPIOB,GPIO_Pin_6);
+      GPIO_SetBits(GPIOB,GPIO_Pin_8);
       OSTimeDly(1000,
                     OS_OPT_TIME_DLY,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_6);
+      GPIO_ResetBits(GPIOB,GPIO_Pin_8);
       OSTimeDly(1000,
                     OS_OPT_TIME_DLY,
                     &err);
       cnt = 0;
     }else{
-      GPIO_SetBits(GPIOB,GPIO_Pin_6);
+      GPIO_SetBits(GPIOB,GPIO_Pin_8);
       OSTimeDly(300,
                     OS_OPT_TIME_DLY,
                     &err);
-      GPIO_ResetBits(GPIOB,GPIO_Pin_6);
+      GPIO_ResetBits(GPIOB,GPIO_Pin_8);
       OSTimeDly(300,
                     OS_OPT_TIME_DLY,
                     &err);
