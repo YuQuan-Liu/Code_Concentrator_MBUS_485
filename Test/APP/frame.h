@@ -73,6 +73,7 @@
 //Fn  AFN == 0x04
 #define FN_CLOSE                      2
 #define FN_OPEN                        3
+#define FN_REPEAT  4   //执行一次开关阀操作  防止生锈
 
 //Fn AFN == 0x0B
 #define FN_CURRENT_METER                4
