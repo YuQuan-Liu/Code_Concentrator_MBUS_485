@@ -203,7 +203,7 @@ void BSP_GPIO_Init(void){
 void BSP_USART_Init(void){
   USART_InitTypeDef usart_init;
   
-  /*USART1  485*/
+  /*USART3  485*/
   usart_init.USART_BaudRate = 2400;
   usart_init.USART_WordLength = USART_WordLength_9b;
   usart_init.USART_Parity = USART_Parity_Even;
@@ -211,12 +211,12 @@ void BSP_USART_Init(void){
   usart_init.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
   usart_init.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
   
-  USART_Init(USART1, &usart_init);
-  USART_Cmd(USART1, ENABLE);
+  USART_Init(USART3, &usart_init);
+  USART_Cmd(USART3, ENABLE);
   
-  USART_ITConfig(USART1, USART_IT_TC, DISABLE);
-  USART_ITConfig(USART1, USART_IT_TXE, DISABLE);
-  USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
+  USART_ITConfig(USART3, USART_IT_TC, DISABLE);
+  USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
+  USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
   
   /*USART2  mbus*/
   usart_init.USART_BaudRate = 2400;
@@ -233,7 +233,7 @@ void BSP_USART_Init(void){
   USART_ITConfig(USART2, USART_IT_TXE, DISABLE);
   USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
   
-  /*USART3  m590e*/
+  /*USART1  m590e*/
   usart_init.USART_BaudRate = 115200;
   usart_init.USART_WordLength = USART_WordLength_8b;
   usart_init.USART_Parity = USART_Parity_No;
@@ -241,12 +241,12 @@ void BSP_USART_Init(void){
   usart_init.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
   usart_init.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
   
-  USART_Init(USART3, &usart_init);
-  USART_Cmd(USART3, ENABLE);
+  USART_Init(USART1, &usart_init);
+  USART_Cmd(USART1, ENABLE);
     
-  USART_ITConfig(USART3, USART_IT_TC, DISABLE);
-  USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
-  USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
+  USART_ITConfig(USART1, USART_IT_TC, DISABLE);
+  USART_ITConfig(USART1, USART_IT_TXE, DISABLE);
+  USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
 }
 
 void BSP_NVIC_Init(void){
