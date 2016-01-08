@@ -81,6 +81,7 @@
 #define   DATAFLAG_WV_L     0x17
 #define   OPEN_VALVE  0x55
 #define   CLOSE_VALVE   0x99
+#define   CLEAN_VALVE   0x72
 
 #define   OPEN_CJQ  0x55
 #define   CLOSE_CJQ   0x99

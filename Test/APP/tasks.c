@@ -1256,8 +1256,8 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
           case FN_CLOSE:
             meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
             break;
-          case FN_REPEAT:
-            meter_repeat(meter_addr,block_meter,meter_type,desc,server_seq_);
+          case FN_CLEAN:
+            meter_clean(meter_addr,block_meter,meter_type,desc,server_seq_);
             break;
           }
           
@@ -1467,8 +1467,17 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     }
     *buf_frame++ = 0x04; //C
     *buf_frame++ = 0x04; //len
-    *buf_frame++ = DATAFLAG_WV_L;
-    *buf_frame++ = DATAFLAG_WV_H;
+    
+    if(di_seq == 0xFF){
+      //默认低位在前
+      *buf_frame++ = DATAFLAG_WV_L;
+      *buf_frame++ = DATAFLAG_WV_H;
+    }else{
+      // 骏普阀控表使用  有点
+      *buf_frame++ = DATAFLAG_WV_H;
+      *buf_frame++ = DATAFLAG_WV_L;
+    }
+    
     *buf_frame++ = 0x01;
     *buf_frame++ = OPEN_VALVE;
     *buf_frame++ = check_cs(buf_frame_,11+4);
@@ -1560,8 +1569,17 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     }
     *buf_frame++ = 0x04; //C
     *buf_frame++ = 0x04; //len
-    *buf_frame++ = DATAFLAG_WV_L;
-    *buf_frame++ = DATAFLAG_WV_H;
+    
+    if(di_seq == 0xFF){
+      //默认低位在前
+      *buf_frame++ = DATAFLAG_WV_L;
+      *buf_frame++ = DATAFLAG_WV_H;
+    }else{
+      // 骏普阀控表使用  有点
+      *buf_frame++ = DATAFLAG_WV_H;
+      *buf_frame++ = DATAFLAG_WV_L;
+    }
+    
     *buf_frame++ = 0x01;
     *buf_frame++ = CLOSE_VALVE;
     *buf_frame++ = check_cs(buf_frame_,11+4);
@@ -1643,50 +1661,12 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
 首先读表操作（从Flash中提取）  获取阀门当前状态
 
 */
-void meter_repeat(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
-    OS_ERR err;
-    CPU_TS ts;
+void meter_clean(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
+    
     uint8_t buf_frame_[17];
     uint8_t i = 0;
-    uint16_t msg_size = 0;
-    uint8_t * buf_readdata = 0;
-    uint8_t success = 0;
-    uint8_t st_l = 0;
-    uint8_t st_h = 0;
     uint8_t * buf_frame = 0;  
   
-    
-    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
-  
-    if(err != OS_ERR_NONE){
-      //获取MUTEX过程中 出错了...
-      //return 0xFFFFFF;
-      return;
-    }
-    sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
-    st_l = *(config_flash+block_meter%0x1000 + 22);
-    
-    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
-    
-    if(st_l & 0x03 == 0x03){
-      //表具异常  不执行处理
-      return;
-    }else{
-      if(st_l & 0x03 == 0x01 || st_l & 0x03 == 0x02){
-        //开  然后   关
-      }else{
-        if(st_l & 0x03 == 0x00){
-          //关  然后   开
-        }
-      }
-    }
-    
-    
-    ****
-    
-    
-    
-    
     buf_frame = buf_frame_;
     *buf_frame++ = FRAME_HEAD;
     *buf_frame++ = meter_type;
@@ -1695,82 +1675,25 @@ void meter_repeat(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,u
     }
     *buf_frame++ = 0x04; //C
     *buf_frame++ = 0x04; //len
-    *buf_frame++ = DATAFLAG_WV_L;
-    *buf_frame++ = DATAFLAG_WV_H;
+    
+    if(di_seq == 0xFF){
+      //默认低位在前
+      *buf_frame++ = DATAFLAG_WV_L;
+      *buf_frame++ = DATAFLAG_WV_H;
+    }else{
+      // 骏普阀控表使用  有点
+      *buf_frame++ = DATAFLAG_WV_H;
+      *buf_frame++ = DATAFLAG_WV_L;
+    }
+    
     *buf_frame++ = 0x01;
-    *buf_frame++ = CLOSE_VALVE;
+    *buf_frame++ = CLEAN_VALVE;
     *buf_frame++ = check_cs(buf_frame_,11+4);
     *buf_frame++ = FRAME_END;
     
-    for(i = 0;success == 0 && i < 2;i++){
-      Slave_Write(fe,4);
-      Slave_Write(buf_frame_,13+4);
-      buf_readdata = OSQPend(&Q_ReadData,15000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
-      if(err != OS_ERR_NONE){
-        if(i==1){
-          //开阀失败  存flash  return nack
-          success = 0;
-        }
-        continue;
-      }
-      //接收到正确的数据
-      //判断表地址
-      if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
-        //获取ST
-        st_l = *(buf_readdata + 14);
-        st_h = *(buf_readdata + 15);
-        //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
-        //me：协议中指的是D1 = 1
-        //骏普：D0 = 1 为关
-        if((st_l & 0x03) == 0x03){
-          //开阀失败  存flash  return nack
-          success = 0;
-        }else{
-          if((st_l & 0x02) == 0x02 || (st_l & 0x01) == 0x01){
-            //opened  return ack
-            success = 1;
-          }else{
-            //开阀失败  存flash  return nack
-            success = 0;
-          }
-        }
-      }
-      OSMemPut(&MEM_Buf,buf_readdata,&err);
-    }
+    Slave_Write(fe,4);
+    Slave_Write(buf_frame_,13+4);
     
-    
-    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
-  
-    if(err != OS_ERR_NONE){
-      //获取MUTEX过程中 出错了...
-      //return 0xFFFFFF;
-    }
-    sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
-    
-    if(success == 0){
-      //开阀失败  存flash  return nack
-      //Mem_Copy(configflash + 22,"\x43",1);  //超时
-      if((st_l & 0x03) == 0x03){
-        //开阀失败  存flash  return nack
-        //阀门坏
-        *(config_flash+block_meter%0x1000 + 22) = st_l;
-        *(config_flash+block_meter%0x1000 + 23) = st_h;
-      }else{
-        //超时
-        *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x40;
-      }
-      //device_nack(desc,server_seq_);  //return nack;
-    }else{
-      *(config_flash+block_meter%0x1000 + 22) = st_l;  //关阀
-      *(config_flash+block_meter%0x1000 + 23) = st_h;  
-      device_ack(desc,server_seq_);   //return ack;
-    }
-    
-    //将配置好的Flash块重新写入到Flash中。
-    sFLASH_EraseSector((block_meter/0x1000)*0x1000);
-    sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
-    
-    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
 }
 
 //config and query the parameter
