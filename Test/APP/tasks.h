@@ -44,6 +44,8 @@ cjq_open   cjq_close  只对4路MBUS继电器进行控制
 uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq);
 uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq);
 
+void cjq_timeout(void *p_tmr,void *p_arg);   //20min 超时 关闭通道
+
 uint8_t relay_485(FunctionalState NewState);
 uint8_t mbus_power(FunctionalState NewState);
 

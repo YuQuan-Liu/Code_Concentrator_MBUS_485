@@ -80,6 +80,9 @@ OS_Q Q_Deal;         //处理接收到的服务器发送过来的数据
 //OS_FLAG
 OS_FLAG_GRP FLAG_Event;
 
+//OS_TMR
+OS_TMR TMR_CJQTIMEOUT;    //打开采集器通道之后 20分钟超时 自动关闭通道
+
 
 volatile uint8_t connectstate = 0;       //0 didn't connect to the server   1 connect to the server
 volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
@@ -437,6 +440,15 @@ void ObjCreate(void){
                (OS_FLAGS)0,
                &err);
   
+  //OS_TMRs
+  OSTmrCreate(&TMR_CJQTIMEOUT,
+              "",
+              12000,
+              0,
+              OS_OPT_TMR_ONE_SHOT,
+              cjq_timeout,
+              0,
+              &err);
 }
 
 

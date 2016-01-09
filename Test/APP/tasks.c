@@ -26,6 +26,8 @@ extern OS_SEM SEM_ACKData;     //服务器对数据的ACK
 extern OS_SEM SEM_SendOver;      //got the "+TCPSEND:0,"  the data is send over now  发送数据完成
 extern OS_SEM SEM_Send;      //got the '>'  we can send the data now  可以发送数据
 
+extern OS_TMR TMR_CJQTIMEOUT;    //打开采集器之后 20分钟超时 自动关闭通道
+
 extern volatile uint8_t reading;
 extern volatile uint8_t connectstate; 
 extern uint8_t deviceaddr[5];
@@ -1276,6 +1278,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
   }
 }
 
+uint8_t cjq_isopen = 0;
 
 uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
     uint8_t buf_frame_[17];
@@ -1290,21 +1293,33 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
     
     if(slave_mbus == 0xAA){
       //mbus ~~~
-      switch (cjq_addr[0]){
-        case 1:
-          relay_1(ENABLE);
-          break;
-        case 2:
-          relay_2(ENABLE);
-          break;
-        case 3:
-          relay_3(ENABLE);
-          break;
-        case 4:
-          relay_4(ENABLE);
-          break;
+      if(cjq_isopen == cjq_addr[0]){
+        OSTmrStart(&TMR_CJQTIMEOUT,&err);
+      }else{
+        relay_1(DISABLE);
+        relay_2(DISABLE);
+        relay_3(DISABLE);
+        relay_4(DISABLE);
+        switch (cjq_addr[0]){
+          case 1:
+            relay_1(ENABLE);
+            cjq_isopen = 1;
+            break;
+          case 2:
+            relay_2(ENABLE);
+            cjq_isopen = 2;
+            break;
+          case 3:
+            relay_3(ENABLE);
+            cjq_isopen = 3;
+            break;
+          case 4:
+            relay_4(ENABLE);
+            cjq_isopen = 4;
+            break;
+        }
+        OSTmrStart(&TMR_CJQTIMEOUT,&err);
       }
-      
       return 1;
     }
     
@@ -1387,20 +1402,12 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
     CPU_TS ts;
     if(slave_mbus == 0xAA){
       //mbus ~~~
-      switch (cjq_addr[0]){
-        case 1:
-          relay_1(DISABLE);
-          break;
-        case 2:
-          relay_2(DISABLE);
-          break;
-        case 3:
-          relay_3(DISABLE);
-          break;
-        case 4:
-          relay_4(DISABLE);
-          break;
-      }
+      relay_1(DISABLE);
+      relay_2(DISABLE);
+      relay_3(DISABLE);
+      relay_4(DISABLE);
+      cjq_isopen = 0;
+      OSTmrStop(&TMR_CJQTIMEOUT,OS_OPT_TMR_NONE,0,&err);
       return 1;
     }
     if(slave_mbus == 0xBB){
@@ -1449,6 +1456,21 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
       return success;
     }
 }
+
+void cjq_timeout(void *p_tmr,void *p_arg){
+  OS_ERR err;
+  //关闭电源
+  power_cmd(DISABLE);
+  //关闭通道
+  //cjq_close();
+  relay_1(DISABLE);
+  relay_2(DISABLE);
+  relay_3(DISABLE);
+  relay_4(DISABLE);
+  cjq_isopen = 0;
+  OSTmrStop(&TMR_CJQTIMEOUT,OS_OPT_TMR_NONE,0,&err);
+}
+
 
 void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
     OS_ERR err;
