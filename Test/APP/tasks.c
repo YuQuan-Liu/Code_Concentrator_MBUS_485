@@ -1217,62 +1217,63 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
     return;
   }
   
-  Device_Read(ENABLE);
-  for(i = 0;meter_fount == 0 && i < cjq_count;i++){
-    sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
-    sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
-    sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
-    
-    for(j=0;j < cjqmeter_count;j++){
-      sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
-      sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
+  server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+  if(*(buf_frame + FN_POSITION) == FN_CLEAN){
+    //send ack;
+    device_ack(desc,server_seq_);
+    meter_clean();
+  }else{
+    Device_Read(ENABLE);
+    for(i = 0;meter_fount == 0 && i < cjq_count;i++){
+      sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
+      sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
+      sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
       
-      if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
-        //找到这个表了。。。
+      for(j=0;j < cjqmeter_count;j++){
+        sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
+        sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
         
-        if(cjq_open(cjq_addr,block_cjq)==0){
-          //没有打开采集器
-            OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+        if(Mem_Cmp(buf_frame + 16,meter_addr,7) == DEF_YES && meter_type == *(buf_frame + 15)){
+          //找到这个表了。。。
           
-            if(err != OS_ERR_NONE){
-              //获取MUTEX过程中 出错了...
-              //return 0xFFFFFF;
-              return;
+          if(cjq_open(cjq_addr,block_cjq)==0){
+            //没有打开采集器
+              OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+            
+              if(err != OS_ERR_NONE){
+                //获取MUTEX过程中 出错了...
+                //return 0xFFFFFF;
+                return;
+              }
+              sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
+              *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
+              
+              //将配置好的Flash块重新写入到Flash中。
+              sFLASH_EraseSector((block_meter/0x1000)*0x1000);
+              sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
+              
+              OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+          }else{
+            switch(*(buf_frame + FN_POSITION)){
+            case FN_OPEN:
+              meter_open(meter_addr,block_meter,meter_type,desc,server_seq_);
+              break;
+            case FN_CLOSE:
+              meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
+              break;
             }
-            sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
-            *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
             
-            //将配置好的Flash块重新写入到Flash中。
-            sFLASH_EraseSector((block_meter/0x1000)*0x1000);
-            sFLASH_WriteBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);
-            
-            OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
-        }else{
-          server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
-          switch(*(buf_frame + FN_POSITION)){
-          case FN_OPEN:
-            meter_open(meter_addr,block_meter,meter_type,desc,server_seq_);
-            break;
-          case FN_CLOSE:
-            meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
-            break;
-          case FN_CLEAN:
-            //send ack;
-            device_ack(desc,server_seq_);
-            meter_clean();
-            break;
+            cjq_close(cjq_addr,block_cjq);
           }
-          
-          cjq_close(cjq_addr,block_cjq);
+          meter_fount = 1; 
+          break;
         }
-        meter_fount = 1; 
-        break;
+        sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
       }
-      sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
+      sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
     }
-    sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
+    Device_Read(DISABLE);
   }
-  Device_Read(DISABLE);
 }
 
 
