@@ -31,7 +31,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
 void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc);  //all = 1 发送全部表  all = 0 发送表块对应的表
 void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_);
 void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_);
-void meter_clean(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_); //执行一次开关阀操作
+void meter_clean(void); //执行一次开关阀操作
 
 void device_ack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485
 void device_nack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485

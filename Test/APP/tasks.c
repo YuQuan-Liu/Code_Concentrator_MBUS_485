@@ -1257,7 +1257,9 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
             meter_close(meter_addr,block_meter,meter_type,desc,server_seq_);
             break;
           case FN_CLEAN:
-            meter_clean(meter_addr,block_meter,meter_type,desc,server_seq_);
+            //send ack;
+            device_ack(desc,server_seq_);
+            meter_clean();
             break;
           }
           
@@ -1661,39 +1663,91 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
 首先读表操作（从Flash中提取）  获取阀门当前状态
 
 */
-void meter_clean(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc,uint8_t server_seq_){
+void meter_clean(void){
     
-    uint8_t buf_frame_[17];
-    uint8_t i = 0;
-    uint8_t * buf_frame = 0;  
+  OS_ERR err;
+  CPU_TS ts;
+  uint32_t block_cjq = 0;   //cjq block 地址
+  uint32_t block_meter = 0;  //meter block 地址
   
-    buf_frame = buf_frame_;
-    *buf_frame++ = FRAME_HEAD;
-    *buf_frame++ = meter_type;
-    for(i=0;i<7;i++){
-      *buf_frame++ = meter_addr[i];
-    }
-    *buf_frame++ = 0x04; //C
-    *buf_frame++ = 0x04; //len
+  uint16_t cjq_count = 0;
+  uint16_t cjqmeter_count = 0;
+  
+  uint16_t i = 0;
+  uint16_t j = 0;
+  
+  uint8_t cjq_addr[6];
+  uint8_t meter_addr[7];
+  uint8_t meter_type = 0;
+  
+  uint8_t buf_frame_[17];
+  uint8_t z = 0;
+  uint8_t * buf_frame = 0; 
+  
+  
+  sFLASH_ReadBuffer((uint8_t *)&cjq_count,sFLASH_CJQ_COUNT,2);
+  sFLASH_ReadBuffer((uint8_t *)&block_cjq,sFLASH_CJQ_Q_START,3);
+  if(cjq_count == 0){
+    //没有采集器。。。
+    return;
+  }
+  
+  Device_Read(ENABLE);
+  for(i = 0;i < cjq_count;i++){
+    sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
+    sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
+    sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
     
-    if(di_seq == 0xFF){
-      //默认低位在前
-      *buf_frame++ = DATAFLAG_WV_L;
-      *buf_frame++ = DATAFLAG_WV_H;
+    if(cjq_open(cjq_addr,block_cjq) == 0){
+      //没有打开采集器
+      //do nothing;
     }else{
-      // 骏普阀控表使用  有点
-      *buf_frame++ = DATAFLAG_WV_H;
-      *buf_frame++ = DATAFLAG_WV_L;
+      for(j=0;j < cjqmeter_count;j++){
+        sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
+        sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
+        
+        //meter_read_single(meter_addr,block_meter,meter_type,desc);
+        buf_frame = buf_frame_;
+        *buf_frame++ = FRAME_HEAD;
+        *buf_frame++ = meter_type;
+        for(z=0;z<7;z++){
+          *buf_frame++ = meter_addr[z];
+        }
+        *buf_frame++ = 0x04; //C
+        *buf_frame++ = 0x04; //len
+        
+        if(di_seq == 0xFF){
+          //默认低位在前
+          *buf_frame++ = DATAFLAG_WV_L;
+          *buf_frame++ = DATAFLAG_WV_H;
+        }else{
+          // 骏普阀控表使用  有点
+          *buf_frame++ = DATAFLAG_WV_H;
+          *buf_frame++ = DATAFLAG_WV_L;
+        }
+        
+        *buf_frame++ = 0x01;
+        *buf_frame++ = CLEAN_VALVE;
+        *buf_frame++ = check_cs(buf_frame_,11+4);
+        *buf_frame++ = FRAME_END;
+        
+        Slave_Write(fe,4);
+        Slave_Write(buf_frame_,13+4);
+        
+        //获取下一个表
+        sFLASH_ReadBuffer((uint8_t *)&block_meter,block_meter+3,3);
+        
+        //延时12s之后执行下一个操作。
+        OSTimeDly(12000,
+                  OS_OPT_TIME_DLY,
+                  &err);
+      }
+      cjq_close(cjq_addr,block_cjq);
     }
-    
-    *buf_frame++ = 0x01;
-    *buf_frame++ = CLEAN_VALVE;
-    *buf_frame++ = check_cs(buf_frame_,11+4);
-    *buf_frame++ = FRAME_END;
-    
-    Slave_Write(fe,4);
-    Slave_Write(buf_frame_,13+4);
-    
+    sFLASH_ReadBuffer((uint8_t *)&block_cjq,block_cjq+3,3);
+  }
+  Device_Read(DISABLE);
+  
 }
 
 //config and query the parameter
