@@ -67,8 +67,9 @@
 #define FN_METER                        6
 #define FN_CJQ                          7
 #define FN_MBUS                         12  //底层表的类型   是否打开MBUS部分  发送信息
-#define FN_TEST                         13  //连接那个域名   sFLASH_CON_WEB ==0xFF~avenger0422.vicp.cc    !=0xFF~www.xcxdtech.com
 #define FN_DI_SEQ                       14  //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   只在抄表时使用
+#define FN_ERASE                        15  //将FLASH清空  重新初始化
+#define FN_RESET                        16  //重启系统
 
 //Fn  AFN == 0x04
 #define FN_CLOSE                      2

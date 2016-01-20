@@ -650,13 +650,10 @@ extern uint8_t ip4;
 extern uint16_t port_;
 
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
-extern uint8_t device_test; //0x00~测试过了~IP   0xFF~未测试~域名（avenger0422.vicp.cc）
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
 void param_conf(void){
   
   uint8_t temp[2] = {0x00,0x00};
-  
-  sFLASH_ReadBuffer(&device_test,sFLASH_CON_WEB,1);
   
   temp[0] = 0x00;
   sFLASH_ReadBuffer(temp,sFLASH_CON_IP,1);

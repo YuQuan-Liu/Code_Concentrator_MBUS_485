@@ -1998,31 +1998,6 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     device_ack(desc,server_seq_);
     break;
-  case FN_TEST:
-    if(*(buf_frame + DATA_POSITION) == 0x00){
-      //go to www.xcxdtech.com
-      device_test = 0x00;
-    }
-    
-    if(*(buf_frame + DATA_POSITION) == 0xFF){
-      //go to avenger0422.vicp.cc
-      device_test = 0xFF;
-    }
-    
-    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
-    if(err != OS_ERR_NONE){
-      //获取MUTEX过程中 出错了...
-      //return 0xFFFFFF;
-      return;
-    }
-    //处理Config Flash 块
-    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
-    Mem_Copy(config_flash + (sFLASH_CON_WEB - sFLASH_CON_START_ADDR),&device_test,1);
-    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
-    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
-    
-    device_ack(desc,server_seq_);
-    break;
   case FN_DI_SEQ:
     if(*(buf_frame + DATA_POSITION) == 0xAA){
       //千宝通使用的大表模块
@@ -2048,7 +2023,31 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     
     device_ack(desc,server_seq_);
     break;
-    
+  case FN_ERASE:
+    if(*(buf_frame + DATA_POSITION) == 0xFF){
+      OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+      if(err != OS_ERR_NONE){
+        //获取MUTEX过程中 出错了...
+        //return 0xFFFFFF;
+        return;
+      }
+      //处理Config Flash 块
+      sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+      di_seq = 0xFF;
+      Mem_Copy(config_flash + (sFLASH_POOL_INIT - sFLASH_CON_START_ADDR),&di_seq,1);
+      sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+      OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+      
+      device_ack(desc,server_seq_);
+      *((uint8_t *)0) = 0x00;  //迫使系统重启
+    }
+    break;
+  case FN_RESET:
+    if(*(buf_frame + DATA_POSITION) == 0xFF){
+      device_ack(desc,server_seq_);
+      *((uint8_t *)0) = 0x00;  //迫使系统重启
+    }
+    break;
   }
   
 }
@@ -2430,9 +2429,6 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_MBUS:
     ack_query_mbus(desc,server_seq_);
-    break;
-  case FN_TEST:
-    ack_query_test(desc,server_seq_);
     break;
   case FN_DI_SEQ:
     ack_query_di_seq(desc,server_seq_);
@@ -3022,53 +3018,6 @@ void ack_query_mbus(uint8_t desc,uint8_t server_seq_){
   *buf_frame++ = FN_MBUS;
   
   *buf_frame++ = slave_mbus;
-  *buf_frame++ = check_cs(buf_frame_+6,10);
-  *buf_frame++ = FRAME_END;
-  
-  
-  if(desc){
-    //to m590e
-    send_server(buf_frame_,18);
-  }else{
-    //to 485
-    Server_Write_485(buf_frame_,18);
-  }
-  
-  OSMemPut(&MEM_Buf,buf_frame_,&err);
-  
-}
-
-void ack_query_test(uint8_t desc,uint8_t server_seq_){
-  OS_ERR err;
-  uint8_t * buf_frame = 0;
-  uint8_t * buf_frame_ = 0;
-  uint16_t * buf_frame_16 = 0;
-  
-  buf_frame = OSMemGet(&MEM_Buf,&err);
-  if(buf_frame == 0){
-    return;
-  }
-  buf_frame_ = buf_frame;
-  *buf_frame++ = FRAME_HEAD;
-  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  *buf_frame++ = FRAME_HEAD;
-  
-  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
-  /**/
-  *buf_frame++ = deviceaddr[0];
-  *buf_frame++ = deviceaddr[1];
-  *buf_frame++ = deviceaddr[2];
-  *buf_frame++ = deviceaddr[3];
-  *buf_frame++ = deviceaddr[4];
-  
-  *buf_frame++ = AFN_QUERY;
-  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
-  *buf_frame++ = FN_TEST;
-  
-  *buf_frame++ = device_test;
   *buf_frame++ = check_cs(buf_frame_+6,10);
   *buf_frame++ = FRAME_END;
   

@@ -39,8 +39,8 @@ u8 *ats[20]={
 	"AT+CREG?\r",  //检查网络注册状态
 	"AT+CGATT?\r",  //检查GPRS附着状态
 	"AT+CIPMUX=1\r",  //设置成多链路模式
-	"AT+CSTT=\"3GWAP\"\r",  //设置APN
-        //"AT+CSTT=\"CMNET\"\r",  //设置APN
+	//"AT+CSTT=\"3GWAP\"\r",  //设置APN
+        "AT+CSTT=\"CMNET\"\r",  //设置APN
 	"AT+CIICR\r",   //建立PPP连接
 	"AT+CIFSR\r",    //获取本地IP地址
 	"AT+CIPSTART=0,\"TCP\",",   //+ip+port 建立TCP连接
@@ -351,7 +351,6 @@ ErrorStatus check_xiic(void){
   return ERROR;
 }
 
-extern uint8_t device_test; //0x00~测试过了~IP   0xFF~未测试~域名（avenger0422.vicp.cc）
 ErrorStatus at_tcpsetup(void){
   OS_ERR err;
   
@@ -365,14 +364,8 @@ ErrorStatus at_tcpsetup(void){
     Mem_Set(buf_server_,0x00,256); //clear the buf
     Server_WriteStr(ats[10]);
     
-    //测试为通过连接测试域名  
     //正式使用时连接IP  地址
-    if(device_test == 0xFF){
-      Server_WriteStr(TEST_DNS);
-    }else{
-      Server_WriteStr(ip);
-    }
-    
+    Server_WriteStr(ip);
     Server_WriteStr(port);
     
     Server_Post2Buf(buf_server);  //接收数据到buf_server
