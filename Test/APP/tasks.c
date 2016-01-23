@@ -1388,6 +1388,7 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
       }
       return success;
     }
+    return 1; //如果底层直接接了485的188协议的表  直接返回1
 }
 
 uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){

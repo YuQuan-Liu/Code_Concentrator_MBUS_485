@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# IAR ELF Linker V7.10.3.6832/W32 for ARM                 20/Jan/2016  14:44:22
+# IAR ELF Linker V7.10.3.6832/W32 for ARM                 23/Jan/2016  16:05:13
 # Copyright 2007-2014 IAR Systems AB.
 #
 #    Output file  =  
@@ -970,9 +970,9 @@ check_cs                0x0800044d    0x20  Code  Gb  tasks.o [1]
 check_frame             0x080007a1    0x42  Code  Gb  tasks.o [1]
 check_str               0x08004d8f    0x14  Code  Gb  sim800g.o [1]
 check_xiic              0x080051fd    0x82  Code  Gb  sim800g.o [1]
-cjq_close               0x08001b71   0x12a  Code  Gb  tasks.o [1]
+cjq_close               0x08001b73   0x12a  Code  Gb  tasks.o [1]
 cjq_isopen              0x20004d20     0x1  Data  Gb  tasks.o [1]
-cjq_open                0x0800194d   0x224  Code  Gb  tasks.o [1]
+cjq_open                0x0800194d   0x226  Code  Gb  tasks.o [1]
 cjq_timeout             0x08001ca1    0x38  Code  Gb  tasks.o [1]
 config_flash            0x20000098  0x1000  Data  Gb  main.o [1]
 connect                 0x0800537d    0x84  Code  Gb  sim800g.o [1]
