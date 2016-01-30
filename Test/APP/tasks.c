@@ -436,7 +436,7 @@ void Task_DealServer(void *p_arg){
         case AFN_CONTROL:
         case AFN_CURRENT:
           
-          server_seq_ = *(start + SEQ_POSITION) * 0x0F;
+          server_seq_ = *(start + SEQ_POSITION) & 0x0F;
           if(*(start+FN_POSITION) == 0x05){
             //匹配序列号
             server_seq = server_seq_;
@@ -1219,7 +1219,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
     return;
   }
   
-  server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+  server_seq_ = *(buf_frame + SEQ_POSITION) & 0x0F;
   if(*(buf_frame + FN_POSITION) == FN_CLEAN){
     //send ack;
     device_ack(desc,server_seq_);
@@ -1819,7 +1819,7 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
   uint32_t block_cjq = 0;   //cjq block 地址
   uint32_t block_cjq_next = 0;   //cjq block 地址删除时  先查出来下一个的地址 然后在删除
   uint32_t block_meter = 0;  //meter block 地址
-  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) & 0x0F;
   
   switch(*(buf_frame + FN_POSITION)){
   case FN_IP_PORT:
@@ -2414,7 +2414,7 @@ uint32_t delete_cjq(uint32_t block_cjq){
 }
 
 void param_query(uint8_t * buf_frame,uint8_t desc){
-  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) * 0x0F;
+  uint8_t server_seq_ = *(buf_frame + SEQ_POSITION) & 0x0F;
   switch(*(buf_frame + FN_POSITION)){
   case FN_IP_PORT:
     ack_query_ip(desc,server_seq_);
