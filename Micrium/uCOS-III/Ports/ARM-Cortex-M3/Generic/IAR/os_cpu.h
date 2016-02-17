@@ -44,7 +44,7 @@
 
 /*
 *********************************************************************************************************
-*                                               MACROS
+*                                               MACROS任务切换
 *********************************************************************************************************
 */
 
@@ -77,7 +77,7 @@
 *                   truncation of TS.
 *********************************************************************************************************
 */
-
+/*uC OS 的时间戳 DWT_CYCCNT 32-bit free running up counter*/
 #if      OS_CFG_TS_EN == 1u
 #define  OS_TS_GET()               (CPU_TS)CPU_TS_TmrRd()   /* See Note #2a.                                          */
 #else
@@ -114,8 +114,7 @@
 *********************************************************************************************************
 */
 
-//the OS_CPU_CFG_SYSTICK_PRIO is not the systick 's priority  
-//in the OS_CPU_SysTickInit(CPU_INT32U cnts) (in os_cpu_c.c) the prio is the 0xFF000000 which is calculate from OS_CPU_CFG_SYSTICK_PRIO
+/*设置SysTick的中断优先级  中断优先级只有高四位有效*/
 #define  OS_CPU_CFG_SYSTICK_PRIO           0u
 
 /*
@@ -123,7 +122,7 @@
 *                                          GLOBAL VARIABLES
 *********************************************************************************************************
 */
-
+/*中断使用的堆栈地址*/
 OS_CPU_EXT  CPU_STK  *OS_CPU_ExceptStkBase;
 
 /*
@@ -134,6 +133,7 @@ OS_CPU_EXT  CPU_STK  *OS_CPU_ExceptStkBase;
 
 void  OSStartHighRdy       (void);
 
+/*在startup_stm32f10x_md.s中 对应的为PendSV_Handler()*/
 //void  OS_CPU_PendSVHandler (void);
 
 

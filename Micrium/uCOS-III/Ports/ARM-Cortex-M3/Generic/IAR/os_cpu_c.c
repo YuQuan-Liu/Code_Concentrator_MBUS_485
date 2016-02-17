@@ -51,6 +51,8 @@ const  CPU_CHAR  *os_cpu_c__c = "$Id: $";
 
 #include  <os.h>
 
+/*OS***Hook()为系统调用的钩子函数，在钩子函数中调用用户的实现*/
+/*在调用OSInit()时初始化所有的OS_App***Ptr为null 如果实现了OS_App***Ptr对应的钩子函数需要在OSInit()调用之后设置其值*/
 /*
 *********************************************************************************************************
 *                                           IDLE TASK HOOK
@@ -63,7 +65,7 @@ const  CPU_CHAR  *os_cpu_c__c = "$Id: $";
 * Note(s)    : None.
 *********************************************************************************************************
 */
-
+/*可以将MCU设置为低功耗*/
 void  OSIdleTaskHook (void)
 {
 #if OS_CFG_APP_HOOKS_EN > 0u
@@ -86,7 +88,7 @@ void  OSIdleTaskHook (void)
 * Note(s)    : None.
 *********************************************************************************************************
 */
-
+/*设置中断使用的堆栈的地址  在os_cpu_a.asm中OSStartHighRdy()配置*/
 void  OSInitHook (void)
 {
     OS_CPU_ExceptStkBase = (CPU_STK *)(OSCfg_ISRStkBasePtr + OSCfg_ISRStkSize - 1u);
@@ -221,7 +223,7 @@ void  OSTaskReturnHook (OS_TCB  *p_tcb)
 *              2) All tasks run in Thread mode, using process stack.
 **********************************************************************************************************
 */
-
+/*初始化任务的堆栈格式，模拟中断刚发生过对上下文进行的压栈处理*/
 CPU_STK  *OSTaskStkInit (OS_TASK_PTR    p_task,
                          void          *p_arg,
                          CPU_STK       *p_stk_base,
@@ -274,7 +276,7 @@ CPU_STK  *OSTaskStkInit (OS_TASK_PTR    p_task,
 *                 to the task being switched out (i.e. the preempted task).
 *********************************************************************************************************
 */
-
+/*在 os_cpu_c.c中OS_CPU_PendSVHandler_nosave 中调用*/
 void  OSTaskSwHook (void)
 {
 #if OS_CFG_TASK_PROFILE_EN > 0u
@@ -355,7 +357,7 @@ void  OSTimeTickHook (void)
 * Note(s)    : 1) This function MUST be placed on entry 15 of the Cortex-M3 vector table.
 *********************************************************************************************************
 */
-
+/*Sys Tick 中断处理函数  调用OSTimeTick()*/
 void  OS_CPU_SysTickHandler (void)
 {
     CPU_SR_ALLOC();
@@ -383,7 +385,8 @@ void  OS_CPU_SysTickHandler (void)
 * Note(s)    : 1) This function MUST be called after OSStart() & after processor initialization.
 *********************************************************************************************************
 */
-
+/*根据OS_CPU_CFG_SYSTICK_PRIO 设置SysTick 的中断优先级   中断优先级只有高四位有效*/
+/*必须在OSStart() 硬件初始化完成之后调用*/
 void  OS_CPU_SysTickInit (CPU_INT32U  cnts)
 {
     CPU_INT32U  prio;
@@ -395,7 +398,6 @@ void  OS_CPU_SysTickInit (CPU_INT32U  cnts)
     prio  = CPU_REG_NVIC_SHPRI3;
     prio &= DEF_BIT_FIELD(24, 0);
     prio |= DEF_BIT_MASK(OS_CPU_CFG_SYSTICK_PRIO, 24);
-
     CPU_REG_NVIC_SHPRI3 = prio;
 
                                                             /* Enable timer.                                          */

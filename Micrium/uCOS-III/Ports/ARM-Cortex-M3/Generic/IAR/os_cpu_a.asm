@@ -71,7 +71,13 @@ NVIC_PENDSVSET  EQU     0x10000000                              ; Value to trigg
 ;              d) Trigger PendSV exception;
 ;              e) Enable interrupts (tasks will run with interrupts enabled).
 ;********************************************************************************************************
-
+;;
+;设置PendSV 中断优先级NVIC_PENDSV_PRI  只有高4位有效
+;设置PSP堆栈地址为0  标志为第一次上下文切换
+;设置MSP堆栈地址为OS_CPU_ExceptStkBase
+;触发PendSV中断
+;开启中断
+;;
 OSStartHighRdy
     LDR     R0, =NVIC_SYSPRI14                                  ; Set the PendSV exception priority
     LDR     R1, =NVIC_PENDSV_PRI
@@ -129,6 +135,29 @@ OSStartHang
 ;              know that it will only be run when no other exception or interrupt is active, and
 ;              therefore safe to assume that context being switched out was using the process stack (PSP).
 ;********************************************************************************************************
+
+;;
+;在进入PendSV中断处理函数时
+;xPSR, PC, LR, R12, R0-R3已经被保存到PSP中
+;处理器模式从Tread切换到Handler模式
+;堆栈为MSP
+;OSTCBCurPtr  指向要挂起的任务TCB
+;OSTCBHighRdyPtr  指向要恢复的任务的TCB
+;;
+
+;;
+;关中断
+;查看PSP是否为0 为0表示第一次上下文切换 跳过压栈R4-R11保存PSP到TCB
+;压栈R4-R11  (8个寄存器)  0x20=0x04*8
+;将PSP保存到当前任务的TCB中  OSTCBCurPtr->OSTCBStkPtr = SP;
+;调用OSTaskSwHook();
+;设置当前最高优先级  OSPrioCur = OSPrioHighRdy;
+;设置要切入的TCB  OSTCBCurPtr = OSTCBHighRdyPtr;
+;从TCB中得到PSP的值  PSP = OSTCBHighRdyPtr->OSTCBStkPtr;
+;出栈R4-R11
+;设置LR为0xFFFFFFFD  确保中断返回后使用PSP  0xFFFFFFF9~使用MSP
+;开中断
+;;
 
 PendSV_Handler
     CPSID   I                                                   ; Prevent interruption during context switch
