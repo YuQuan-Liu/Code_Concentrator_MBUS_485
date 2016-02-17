@@ -37,6 +37,7 @@ extern uint8_t slave_mbus; //0xaa mbus   0xff  485   0xBB~采集器
 extern uint8_t config_flash[];  //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
 extern OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
+extern uint8_t ack_action;  //先应答后操作~0xaa    先操作后应答~0xff
 
 uint8_t heart_seq = 0;  //记录心跳的序列号 等待ack
 uint8_t data_seq = 0;  //记录数据的序列号 等待ack
@@ -1521,23 +1522,29 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
         continue;
       }
       //接收到正确的数据
-      
-      //判断表地址
-      if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
-        //获取ST
-        st_l = *(buf_readdata + 14);
-        st_h = *(buf_readdata + 15);
-        if((st_l & 0x03) == 0x00){
-          //opened  return ack
-          success = 1;
-        }else{
-          //开阀失败  存flash  return nack
-          success = 0;
+      if(ack_action != 0xff){
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
+        OSTimeDly(12000,
+                  OS_OPT_TIME_DLY,
+                  &err);
+        success = 1;
+      }else{
+        //判断表地址
+        if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
+          //获取ST
+          st_l = *(buf_readdata + 14);
+          st_h = *(buf_readdata + 15);
+          if((st_l & 0x03) == 0x00){
+            //opened  return ack
+            success = 1;
+          }else{
+            //开阀失败  存flash  return nack
+            success = 0;
+          }
         }
+        
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
       }
-      
-      OSMemPut(&MEM_Buf,buf_readdata,&err);
-      
     }
     
     OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
@@ -1562,8 +1569,13 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       //device_nack(desc,server_seq_);
     }else{
       //开
-      *(config_flash+block_meter%0x1000 + 22) = st_l;
-      *(config_flash+block_meter%0x1000 + 23) = st_h;
+      if(ack_action != 0xff){
+        *(config_flash+block_meter%0x1000 + 22) = 0x00;
+        *(config_flash+block_meter%0x1000 + 23) = 0x00;
+      }else{
+        *(config_flash+block_meter%0x1000 + 22) = st_l;
+        *(config_flash+block_meter%0x1000 + 23) = st_h;
+      }
       device_ack(desc,server_seq_);   //return nack;
     }
     
@@ -1623,28 +1635,36 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
         continue;
       }
       //接收到正确的数据
-      //判断表地址
-      if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
-        //获取ST
-        st_l = *(buf_readdata + 14);
-        st_h = *(buf_readdata + 15);
-        //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
-        //me：协议中指的是D1 = 1
-        //骏普：D0 = 1 为关
-        if((st_l & 0x03) == 0x03){
-          //开阀失败  存flash  return nack
-          success = 0;
-        }else{
-          if((st_l & 0x02) == 0x02 || (st_l & 0x01) == 0x01){
-            //opened  return ack
-            success = 1;
-          }else{
+      if(ack_action != 0xff){
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
+        OSTimeDly(12000,
+                  OS_OPT_TIME_DLY,
+                  &err);
+        success = 1;
+      }else{
+        //判断表地址
+        if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
+          //获取ST
+          st_l = *(buf_readdata + 14);
+          st_h = *(buf_readdata + 15);
+          //对于关阀在ST中的理解   D0 D1中只要有一个为1即关  
+          //me：协议中指的是D1 = 1
+          //骏普：D0 = 1 为关
+          if((st_l & 0x03) == 0x03){
             //开阀失败  存flash  return nack
             success = 0;
+          }else{
+            if((st_l & 0x02) == 0x02 || (st_l & 0x01) == 0x01){
+              //opened  return ack
+              success = 1;
+            }else{
+              //开阀失败  存flash  return nack
+              success = 0;
+            }
           }
         }
+        OSMemPut(&MEM_Buf,buf_readdata,&err);
       }
-      OSMemPut(&MEM_Buf,buf_readdata,&err);
     }
     
     
@@ -1671,8 +1691,14 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       }
       //device_nack(desc,server_seq_);  //return nack;
     }else{
-      *(config_flash+block_meter%0x1000 + 22) = st_l;  //关阀
-      *(config_flash+block_meter%0x1000 + 23) = st_h;  
+      //关阀
+      if(ack_action != 0xff){
+        *(config_flash+block_meter%0x1000 + 22) = 0x01;
+        *(config_flash+block_meter%0x1000 + 23) = 0x00;
+      }else{
+        *(config_flash+block_meter%0x1000 + 22) = st_l;
+        *(config_flash+block_meter%0x1000 + 23) = st_h;
+      }
       device_ack(desc,server_seq_);   //return ack;
     }
     
@@ -2019,6 +2045,31 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     //处理Config Flash 块
     sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
     Mem_Copy(config_flash + (sFLASH_READMETER_DI_SEQ - sFLASH_CON_START_ADDR),&di_seq,1);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+    
+    device_ack(desc,server_seq_);
+    break;
+  case FN_ACK_ACTION:
+    if(*(buf_frame + DATA_POSITION) == 0xAA){
+      //骏普阀控表模式
+      ack_action = 0xAA;
+    }
+    
+    if(*(buf_frame + DATA_POSITION) == 0xFF){
+      //默认
+      ack_action = 0xFF;
+    }
+    
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+      return;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_ACK_ACTION - sFLASH_CON_START_ADDR),&ack_action,1);
     sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
     OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
@@ -2433,6 +2484,9 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_DI_SEQ:
     ack_query_di_seq(desc,server_seq_);
+    break;
+  case FN_ACK_ACTION:
+    ack_query_ack_action(desc,server_seq_);
     break;
   }
 }
@@ -3082,6 +3136,53 @@ void ack_query_di_seq(uint8_t desc,uint8_t server_seq_){
   
 }
 
+
+void ack_query_ack_action(uint8_t desc,uint8_t server_seq_){
+  OS_ERR err;
+  uint8_t * buf_frame = 0;
+  uint8_t * buf_frame_ = 0;
+  uint16_t * buf_frame_16 = 0;
+  
+  buf_frame = OSMemGet(&MEM_Buf,&err);
+  if(buf_frame == 0){
+    return;
+  }
+  buf_frame_ = buf_frame;
+  *buf_frame++ = FRAME_HEAD;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = FRAME_HEAD;
+  
+  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+  /**/
+  *buf_frame++ = deviceaddr[0];
+  *buf_frame++ = deviceaddr[1];
+  *buf_frame++ = deviceaddr[2];
+  *buf_frame++ = deviceaddr[3];
+  *buf_frame++ = deviceaddr[4];
+  
+  *buf_frame++ = AFN_QUERY;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
+  *buf_frame++ = FN_ACK_ACTION;
+  
+  *buf_frame++ = ack_action;
+  *buf_frame++ = check_cs(buf_frame_+6,10);
+  *buf_frame++ = FRAME_END;
+  
+  
+  if(desc){
+    //to m590e
+    send_server(buf_frame_,18);
+  }else{
+    //to 485
+    Server_Write_485(buf_frame_,18);
+  }
+  
+  OSMemPut(&MEM_Buf,buf_frame_,&err);
+  
+}
 
 extern OS_FLAG_GRP FLAG_Event;
 void Task_OverLoad(void *p_arg){

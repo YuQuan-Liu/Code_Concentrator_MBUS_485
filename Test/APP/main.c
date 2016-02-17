@@ -87,6 +87,7 @@ OS_TMR TMR_CJQTIMEOUT;    //打开采集器通道之后 20分钟超时 自动关闭通道
 volatile uint8_t connectstate = 0;       //0 didn't connect to the server   1 connect to the server
 volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
 
+uint8_t ack_action = 0xff;  //先应答后操作~0xaa    先操作后应答~0xff
 uint8_t slave_mbus = 0xaa; //0xaa~mbus   0xff~485   0xbb~采集器
 uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 

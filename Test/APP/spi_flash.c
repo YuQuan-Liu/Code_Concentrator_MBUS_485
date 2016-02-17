@@ -649,6 +649,7 @@ extern uint8_t ip3;
 extern uint8_t ip4;
 extern uint16_t port_;
 
+extern uint8_t ack_action;  //先应答后操作~0xaa    先操作后应答~0xff
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
 void param_conf(void){
@@ -675,6 +676,8 @@ void param_conf(void){
   sFLASH_ReadBuffer((uint8_t *)&slave_mbus,sFLASH_METER_MBUS,1);
   //the seq of the di  数据标示的顺序
   sFLASH_ReadBuffer((uint8_t *)&di_seq,sFLASH_READMETER_DI_SEQ,1);
+  //阀门是先操作还是先应答 ack_action
+  sFLASH_ReadBuffer((uint8_t *)&ack_action,sFLASH_ACK_ACTION,1);
   //the device 's addr
   temp[0] = 0x00;
   sFLASH_ReadBuffer(temp,sFLASH_DEVICE_ADDR,1);

@@ -70,6 +70,7 @@
 #define FN_DI_SEQ                       14  //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   只在抄表时使用
 #define FN_ERASE                        15  //将FLASH清空  重新初始化
 #define FN_RESET                        16  //重启系统
+#define FN_ACK_ACTION                   17  //先应答后操作~0xaa    先操作后应答~0xff
 
 //Fn  AFN == 0x04
 #define FN_CLOSE                      2
