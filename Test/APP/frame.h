@@ -71,6 +71,7 @@
 #define FN_ERASE                        15  //将FLASH清空  重新初始化
 #define FN_RESET                        16  //重启系统
 #define FN_ACK_ACTION                   17  //先应答后操作~0xaa    先操作后应答~0xff
+#define FN_PROTOCOL                   18  //协议类型 0xFF~188(Default)  1~EG  
 
 //Fn  AFN == 0x04
 #define FN_CLOSE                      2

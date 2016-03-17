@@ -651,7 +651,8 @@ extern uint16_t port_;
 
 extern uint8_t ack_action;  //先应答后操作~0xaa    先操作后应答~0xff
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485
-extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)   
+extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default) 
+extern uint8_t protocol;  //协议类型 0xFF~188(Default)  1~EG 
 void param_conf(void){
   
   uint8_t temp[2] = {0x00,0x00};
@@ -678,6 +679,8 @@ void param_conf(void){
   sFLASH_ReadBuffer((uint8_t *)&di_seq,sFLASH_READMETER_DI_SEQ,1);
   //阀门是先操作还是先应答 ack_action
   sFLASH_ReadBuffer((uint8_t *)&ack_action,sFLASH_ACK_ACTION,1);
+  //协议类型 0xFF~188(Default)  1~EG  
+  sFLASH_ReadBuffer((uint8_t *)&protocol,sFLASH_PROTOCOL,1);
   //the device 's addr
   temp[0] = 0x00;
   sFLASH_ReadBuffer(temp,sFLASH_DEVICE_ADDR,1);

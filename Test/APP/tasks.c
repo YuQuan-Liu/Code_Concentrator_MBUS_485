@@ -9,7 +9,7 @@
 #include "gprs.h"
 #include "frame.h"
 #include "frame_188.h"
-
+#include "readeg.h"
 //#include "stdlib.h"
 
 extern OS_MEM MEM_Buf;
@@ -35,9 +35,11 @@ extern uint8_t deviceaddr[5];
 extern uint8_t slave_mbus; //0xaa mbus   0xff  485   0xBB~采集器
 
 extern uint8_t config_flash[];  //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
+extern uint8_t *meterdata;  //使用海大协议抄表时存放返回的信息  使用config_flash
 extern OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
 extern uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
 extern uint8_t ack_action;  //先应答后操作~0xaa    先操作后应答~0xff
+extern uint8_t protocol;  //协议类型 0xFF~188(Default)  1~EG 
 
 uint8_t heart_seq = 0;  //记录心跳的序列号 等待ack
 uint8_t data_seq = 0;  //记录数据的序列号 等待ack
@@ -104,40 +106,103 @@ void Task_Slave(void *p_arg){
     
     if(reading){
       //it is the frame come from the meter
-      if(start_slave == 0){
-        if(data == 0x68){
+      switch(protocol){
+      case 0xFF:
+        //188
+        if(start_slave == 0){
+          if(data == 0x68){
+            *buf++ = data;
+            frame_len = 0;
+            start_slave = 1;
+          }
+        }else{
           *buf++ = data;
-          frame_len = 0;
-          start_slave = 1;
-        }
-      }else{
-        *buf++ = data;
-        if((buf-buf_) == 11){
-          frame_len = *(buf_+10)+13;
-        }
-        if(frame_len > 0 && (buf-buf_) >= frame_len){
-          //if it is the end of the frame
-          if(*(buf-1) == 0x16){
-            //check the frame cs
-            if(*(buf-2) == check_cs(buf_,frame_len-2)){
-              //the frame is ok;
-              OSQPost(&Q_ReadData,
-                      buf_,
-                      frame_len,
-                      OS_OPT_POST_FIFO,
-                      &err);
-              buf_ = 0;
-              buf = 0;
+          if((buf-buf_) == 11){
+            frame_len = *(buf_+10)+13;
+          }
+          if(frame_len > 0 && (buf-buf_) >= frame_len){
+            //if it is the end of the frame
+            if(*(buf-1) == 0x16){
+              //check the frame cs
+              if(*(buf-2) == check_cs(buf_,frame_len-2)){
+                //the frame is ok;
+                OSQPost(&Q_ReadData,
+                        buf_,
+                        frame_len,
+                        OS_OPT_POST_FIFO,
+                        &err);
+                buf_ = 0;
+                buf = 0;
+                start_slave = 0;
+                frame_len = 0;
+              }
+            }else{
+              buf = buf_;
               start_slave = 0;
               frame_len = 0;
             }
-          }else{
-            buf = buf_;
-            start_slave = 0;
-            frame_len = 0;
           }
         }
+        break;
+      case 0x01:
+        if(start_slave == 0){
+          if(data == 0x0E){
+            *buf++ = data;
+            frame_len = 0;
+            start_slave = 1;
+          }
+        }else{
+          *buf++ = data;
+          if((buf-buf_) > 8){
+            if(*(buf_+2) == 0x0B){
+              //the slave is meter
+              //post to the reading_q
+              frame_len = 9;
+              if(check_eor(buf_,9) == 0x00){
+                //the frame is ok;
+                OSQPost(&Q_ReadData,
+                        buf_,
+                        frame_len,
+                        OS_OPT_POST_FIFO,
+                        &err);
+                buf_ = 0;
+                buf = 0;
+                start_slave = 0;
+                frame_len = 0;
+              }else{
+                buf = buf_;
+                start_slave = 0;
+                frame_len = 0;
+              }
+            }
+            if(*(buf_+2) == 0x0C){
+              //the slave is cjq
+              if(buf-buf_ > 9){
+                //post to the reading_q
+                frame_len = 10;
+                if(check_eor(buf_,10) == 0x00){
+                  //the frame is ok;
+                  OSQPost(&Q_ReadData,
+                          buf_,
+                          frame_len,
+                          OS_OPT_POST_FIFO,
+                          &err);
+                  buf_ = 0;
+                  buf = 0;
+                  start_slave = 0;
+                  frame_len = 0;
+                }else{
+                  buf = buf_;
+                  start_slave = 0;
+                  frame_len = 0;
+                }
+              }
+            }
+          }
+        }
+        break;
       }
+      
       
     }else{
       //it is the frame come from programmer
@@ -241,16 +306,21 @@ uint8_t check_cs(uint8_t * start,uint16_t len){
 }
 
 
+uint8_t check_eor(uint8_t * start,uint16_t len){
+  uint16_t i;
+  uint8_t cs = 0;
+  for(i = 0;i < len;i++){
+    cs ^= *(start+i);
+  }
+  return cs;
+}
+
 
 uint8_t * volatile server_ptr = 0;      //中断中保存M590E 返回来的数据
 uint8_t * volatile server_ptr_ = 0;     //记录中断的开始指针
 
 void Task_Server(void *p_arg){
   OS_ERR err;
-  CPU_TS ts;
-  uint8_t data = 0;
-  uint8_t * mem_ptr = 0;
-  uint16_t msg_size = 0;
   
   uint8_t * buf_server_task = 0;
   uint8_t * buf_server_task_ = 0;
@@ -596,19 +666,31 @@ void Task_Read(void *p_arg){
                         &msg_size,
                         &ts,
                         &err);
-    
-    switch(*(buf_frame+AFN_POSITION)){
-      case AFN_CONTROL:
-        power_cmd(ENABLE);
-        meter_control(buf_frame,*(buf_frame+msg_size));
-        power_cmd(DISABLE);
-        break;
-      case AFN_CURRENT:
-        power_cmd(ENABLE);
-        meter_read(buf_frame,*(buf_frame+msg_size));
-        power_cmd(DISABLE);
-        break;
+    switch(protocol){
+    case 0xFF:
+      //188
+      switch(*(buf_frame+AFN_POSITION)){
+        case AFN_CONTROL:
+          power_cmd(ENABLE);
+          meter_control(buf_frame,*(buf_frame+msg_size));
+          power_cmd(DISABLE);
+          break;
+        case AFN_CURRENT:
+          power_cmd(ENABLE);
+          meter_read_188(buf_frame,*(buf_frame+msg_size));
+          power_cmd(DISABLE);
+          break;
+      }
+      break;
+    case 0x01:
+      //EG 
+      power_cmd(ENABLE);
+      meter_read_eg(buf_frame,*(buf_frame+msg_size));
+      power_cmd(DISABLE);
+      break;
     }
+    
+    
     
     OSMemPut(&MEM_Buf,buf_frame,&err);
   }
@@ -626,7 +708,7 @@ uint8_t mbus_power(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOA,GPIO_Pin_0);
   }
-  
+  return 1;
 }
 
 uint8_t relay_485(FunctionalState NewState){
@@ -640,7 +722,7 @@ uint8_t relay_485(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_1);
   }
-  
+  return 1;
 }
 
 uint8_t relay_1(FunctionalState NewState){
@@ -653,6 +735,7 @@ uint8_t relay_1(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOA,GPIO_Pin_15);
   }
+  return 1;
 }
 uint8_t relay_2(FunctionalState NewState){
   OS_ERR err;
@@ -664,6 +747,7 @@ uint8_t relay_2(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_3);
   }
+  return 1;
 }
 uint8_t relay_3(FunctionalState NewState){
   OS_ERR err;
@@ -675,6 +759,7 @@ uint8_t relay_3(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_4);
   }
+  return 1;
 }
 uint8_t relay_4(FunctionalState NewState){
   OS_ERR err;
@@ -686,6 +771,41 @@ uint8_t relay_4(FunctionalState NewState){
   }else{
     GPIO_ResetBits(GPIOB,GPIO_Pin_5);
   }
+  return 1;
+}
+
+/*
+抄海大协议表
+*/
+void meter_read_eg(uint8_t * buf_frame,uint8_t desc){
+  OS_ERR err;
+  CPU_TS ts;
+  //获取config_flash的使用权
+  OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  if(err != OS_ERR_NONE){
+    //获取MUTEX过程中 出错了...
+    //return 0xFFFFFF;
+    return;
+  }
+  meterdata = config_flash; //将表返回的所有信息存放在config_flash
+  
+  switch (*(buf_frame + DATA_POSITION)){
+    case 0xAA:
+      meter_single_eg(buf_frame);
+      send_data_eg(1,desc);
+    break;
+    case 0x00:
+      meter_cjq_eg(buf_frame);
+      if(meterdata[2] != 0xFF){
+        send_data_eg(*(buf_frame + DATA_POSITION + 3),desc);
+      }else{
+        send_cjqtimeout_eg(desc);
+      }
+      
+    break;
+  }
+  
+  OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
 }
 
 /*
@@ -699,7 +819,7 @@ uint8_t relay_4(FunctionalState NewState){
 关掉指定采集器的透传功能 
 
 */
-void meter_read(uint8_t * buf_frame,uint8_t desc){
+void meter_read_188(uint8_t * buf_frame,uint8_t desc){
   OS_ERR err;
   CPU_TS ts;
   uint32_t block_cjq = 0;   //cjq block 地址
@@ -949,8 +1069,7 @@ void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc){
   uint16_t meter_count_ = 0;    //保持一帧中数据体的个数
   uint8_t header = 0;   //一帧的帧头是否已准备
   
-  uint16_t len = 0;
-  uint8_t data_ack = 0;  //发送数据的ack 
+  uint16_t len = 0; 
   
   block_meter = block_meter_;
   
@@ -1455,8 +1574,8 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
         }
         OSMemPut(&MEM_Buf,buf_readdata,&err);
       }
-      return success;
     }
+    return success;
 }
 
 void cjq_timeout(void *p_tmr,void *p_arg){
@@ -1716,7 +1835,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
 void meter_clean(void){
     
   OS_ERR err;
-  CPU_TS ts;
   uint32_t block_cjq = 0;   //cjq block 地址
   uint32_t block_meter = 0;  //meter block 地址
   
@@ -2070,6 +2188,29 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
     //处理Config Flash 块
     sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
     Mem_Copy(config_flash + (sFLASH_ACK_ACTION - sFLASH_CON_START_ADDR),&ack_action,1);
+    sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
+    OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
+    
+    device_ack(desc,server_seq_);
+    break;
+  case FN_PROTOCOL:
+    if(*(buf_frame + DATA_POSITION) == 0x01){
+      //EG protocol
+      protocol = 0x01;
+    }else{
+      //188协议
+      protocol = 0xFF;
+    }
+    
+    OSMutexPend(&MUTEX_CONFIGFLASH,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+    if(err != OS_ERR_NONE){
+      //获取MUTEX过程中 出错了...
+      //return 0xFFFFFF;
+      return;
+    }
+    //处理Config Flash 块
+    sFLASH_ReadBuffer(config_flash,sFLASH_CON_START_ADDR,256);
+    Mem_Copy(config_flash + (sFLASH_PROTOCOL - sFLASH_CON_START_ADDR),&protocol,1);
     sFLASH_EraseWritePage(config_flash,sFLASH_CON_START_ADDR,256);
     OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
     
@@ -2487,6 +2628,9 @@ void param_query(uint8_t * buf_frame,uint8_t desc){
     break;
   case FN_ACK_ACTION:
     ack_query_ack_action(desc,server_seq_);
+    break;
+  case FN_PROTOCOL:
+    ack_query_protocol(desc,server_seq_);
     break;
   }
 }
@@ -3046,7 +3190,6 @@ void ack_query_mbus(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
-  uint16_t * buf_frame_16 = 0;
   
   buf_frame = OSMemGet(&MEM_Buf,&err);
   if(buf_frame == 0){
@@ -3093,7 +3236,6 @@ void ack_query_di_seq(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
-  uint16_t * buf_frame_16 = 0;
   
   buf_frame = OSMemGet(&MEM_Buf,&err);
   if(buf_frame == 0){
@@ -3141,7 +3283,6 @@ void ack_query_ack_action(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame = 0;
   uint8_t * buf_frame_ = 0;
-  uint16_t * buf_frame_16 = 0;
   
   buf_frame = OSMemGet(&MEM_Buf,&err);
   if(buf_frame == 0){
@@ -3168,6 +3309,53 @@ void ack_query_ack_action(uint8_t desc,uint8_t server_seq_){
   *buf_frame++ = FN_ACK_ACTION;
   
   *buf_frame++ = ack_action;
+  *buf_frame++ = check_cs(buf_frame_+6,10);
+  *buf_frame++ = FRAME_END;
+  
+  
+  if(desc){
+    //to m590e
+    send_server(buf_frame_,18);
+  }else{
+    //to 485
+    Server_Write_485(buf_frame_,18);
+  }
+  
+  OSMemPut(&MEM_Buf,buf_frame_,&err);
+  
+}
+
+
+void ack_query_protocol(uint8_t desc,uint8_t server_seq_){
+  OS_ERR err;
+  uint8_t * buf_frame = 0;
+  uint8_t * buf_frame_ = 0;
+  
+  buf_frame = OSMemGet(&MEM_Buf,&err);
+  if(buf_frame == 0){
+    return;
+  }
+  buf_frame_ = buf_frame;
+  *buf_frame++ = FRAME_HEAD;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = 0x2B;//(10 << 2) | 0x03;
+  *buf_frame++ = 0x00;
+  *buf_frame++ = FRAME_HEAD;
+  
+  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_DATA;
+  /**/
+  *buf_frame++ = deviceaddr[0];
+  *buf_frame++ = deviceaddr[1];
+  *buf_frame++ = deviceaddr[2];
+  *buf_frame++ = deviceaddr[3];
+  *buf_frame++ = deviceaddr[4];
+  
+  *buf_frame++ = AFN_QUERY;
+  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
+  *buf_frame++ = FN_PROTOCOL;
+  
+  *buf_frame++ = protocol;
   *buf_frame++ = check_cs(buf_frame_+6,10);
   *buf_frame++ = FRAME_END;
   

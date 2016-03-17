@@ -53,6 +53,7 @@ uint8_t mem_isr[30][4];
 
 //配置处理Flash使用的数组  Sector==4K  需要一个4K的数组
 uint8_t config_flash[0x1000];
+uint8_t *meterdata;  //使用海大协议抄表时存放返回的信息  使用config_flash
 
 //OS_MUTEXs;
 OS_MUTEX MUTEX_CONFIGFLASH;    //是否可以使用 config_flash  4K 数组配置FLASH
@@ -90,7 +91,7 @@ volatile uint8_t reading = 0;   //0 didn't reading meters    1  reading meters
 uint8_t ack_action = 0xff;  //先应答后操作~0xaa    先操作后应答~0xff
 uint8_t slave_mbus = 0xaa; //0xaa~mbus   0xff~485   0xbb~采集器
 uint8_t di_seq; //DI0 DI1 顺序   0xAA~DI1在前(千宝通)   0xFF~DI0在前(default)  
-
+uint8_t protocol = 0xFF;  //协议类型 0xFF~188(Default)  1~EG 
 
 void TaskStart(void *p_arg);
 void TaskCreate(void);

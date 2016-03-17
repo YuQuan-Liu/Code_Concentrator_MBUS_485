@@ -24,8 +24,10 @@ void ack_query_addr(uint8_t desc,uint8_t server_seq_);
 void ack_query_ip(uint8_t desc,uint8_t server_seq_);
 void ack_query_di_seq(uint8_t desc,uint8_t server_seq_);
 void ack_query_ack_action(uint8_t desc,uint8_t server_seq_);
+void ack_query_protocol(uint8_t desc,uint8_t server_seq_);
 
-void meter_read(uint8_t * buf_frame,uint8_t desc);  //抄表
+void meter_read_188(uint8_t * buf_frame,uint8_t desc);  //抄表
+void meter_read_eg(uint8_t * buf_frame,uint8_t desc);  //抄表
 void meter_control(uint8_t * buf_frame,uint8_t desc);   //开关阀
 void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uint8_t desc);  //只管读表
 void meter_send(uint8_t all,uint32_t block_meter_,uint8_t desc);  //all = 1 发送全部表  all = 0 发送表块对应的表
@@ -65,8 +67,9 @@ void Task_Config(void *p_arg);
 void Task_LED(void *p_arg);
 void Task_OverLoad(void *p_arg);
 
-
+void addSEQ(void);  //增加local_seq
 uint8_t check_cs(uint8_t * start,uint16_t len);  //add the cs and return cs
+uint8_t check_eor(uint8_t * start,uint16_t len);
 uint8_t check_frame(uint8_t * start);
 
 #endif
