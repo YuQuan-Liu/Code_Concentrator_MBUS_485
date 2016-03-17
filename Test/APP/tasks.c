@@ -788,7 +788,7 @@ void meter_read_eg(uint8_t * buf_frame,uint8_t desc){
     return;
   }
   meterdata = config_flash; //将表返回的所有信息存放在config_flash
-  
+  Device_Read(ENABLE);
   switch (*(buf_frame + DATA_POSITION)){
     case 0xAA:
       meter_single_eg(buf_frame);
@@ -804,6 +804,7 @@ void meter_read_eg(uint8_t * buf_frame,uint8_t desc){
       
     break;
   }
+  Device_Read(DISABLE);
   
   OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
 }
