@@ -2656,11 +2656,11 @@ void Task_LED(void *p_arg){
       cnt = 0;
     }else{
       GPIO_SetBits(GPIOB,GPIO_Pin_8);
-      OSTimeDly(300,
+      OSTimeDly(100,
                     OS_OPT_TIME_DLY,
                     &err);
       GPIO_ResetBits(GPIOB,GPIO_Pin_8);
-      OSTimeDly(300,
+      OSTimeDly(100,
                     OS_OPT_TIME_DLY,
                     &err);
       if(readingall){
@@ -3377,6 +3377,7 @@ extern OS_FLAG_GRP FLAG_Event;
 void Task_OverLoad(void *p_arg){
   OS_ERR err;
   CPU_TS ts;
+  uint16_t cnt = 0;
   
   while(DEF_TRUE){
     
@@ -3396,17 +3397,21 @@ void Task_OverLoad(void *p_arg){
       //disable the mbus power
       GPIO_ResetBits(GPIOA,GPIO_Pin_0);
       //Light the LED3
-      
-      while(DEF_TRUE){
-        GPIO_SetBits(GPIOB,GPIO_Pin_7);
-        OSTimeDly(100,
-                  OS_OPT_TIME_DLY,
-                  &err);
+      //·äÃùÆ÷Ïì20s
+      while(cnt < 100){
         GPIO_ResetBits(GPIOB,GPIO_Pin_7);
         OSTimeDly(100,
                   OS_OPT_TIME_DLY,
                   &err);
+        GPIO_SetBits(GPIOB,GPIO_Pin_7);
+        OSTimeDly(100,
+                  OS_OPT_TIME_DLY,
+                  &err);
+        cnt++;
       }
+      cnt = 0;
+      //disable the beep
+      GPIO_ResetBits(GPIOC,GPIO_Pin_14);
     }
     
   }
