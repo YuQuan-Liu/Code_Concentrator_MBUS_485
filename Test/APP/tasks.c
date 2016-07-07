@@ -983,7 +983,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       half[i] = 0x00;
     }
     
-    for(i = 0;success == 0 && i < 3;i++){
+    for(i = 0;success == 0 && i < 1;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+3);
       buf_readdata = OSQPend(&Q_ReadData,1200,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
@@ -1630,7 +1630,7 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
     *buf_frame++ = check_cs(buf_frame_,11+4);
     *buf_frame++ = FRAME_END;
     
-    for(i = 0;success == 0 && i < 2;i++){
+    for(i = 0;success == 0 && i < 1;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+4);
       buf_readdata = OSQPend(&Q_ReadData,15000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
@@ -1743,7 +1743,7 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
     *buf_frame++ = check_cs(buf_frame_,11+4);
     *buf_frame++ = FRAME_END;
     
-    for(i = 0;success == 0 && i < 2;i++){
+    for(i = 0;success == 0 && i < 1;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+4);
       buf_readdata = OSQPend(&Q_ReadData,15000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
