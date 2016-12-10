@@ -199,7 +199,7 @@ void BSP_USART_Init(void){
   USART_InitTypeDef usart_init;
   
   /*USART3  485*/
-  usart_init.USART_BaudRate = 1200;
+  usart_init.USART_BaudRate = 2400;
   usart_init.USART_WordLength = USART_WordLength_9b;
   usart_init.USART_Parity = USART_Parity_Even;
   usart_init.USART_StopBits = USART_StopBits_1;
@@ -214,7 +214,7 @@ void BSP_USART_Init(void){
   USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
   
   /*USART2  mbus*/
-  usart_init.USART_BaudRate = 1200;
+  usart_init.USART_BaudRate = 2400;
   usart_init.USART_WordLength = USART_WordLength_9b;
   usart_init.USART_Parity = USART_Parity_Even;
   usart_init.USART_StopBits = USART_StopBits_1;

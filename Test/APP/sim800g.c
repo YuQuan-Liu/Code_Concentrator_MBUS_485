@@ -21,13 +21,13 @@ extern volatile uint8_t connectstate;
 extern uint8_t * volatile server_ptr;      //中断中保存M590E 返回来的数据
 extern uint8_t * volatile server_ptr_;     //记录中断的开始指针
 
-uint8_t ip[17] = "218.28.41.74";                 //the server ip
+uint8_t ip[17] = "139.129.40.74";                 //the server ip
 uint8_t port[8] = ",3333\r";                     //the server port
 uint8_t deviceaddr[5] = {0x99,0x09,0x00,0x00,0x57};      //设备地址
 
-uint8_t ip1 = 218;
-uint8_t ip2 = 28;
-uint8_t ip3 = 41;
+uint8_t ip1 = 139;
+uint8_t ip2 = 129;
+uint8_t ip3 = 40;
 uint8_t ip4 = 74;
 uint16_t port_ = 3333;
 
@@ -39,8 +39,8 @@ u8 *ats[20]={
 	"AT+CREG?\r",  //检查网络注册状态
 	"AT+CGATT?\r",  //检查GPRS附着状态
 	"AT+CIPMUX=1\r",  //设置成多链路模式
-	//"AT+CSTT=\"3GWAP\"\r",  //设置APN
-        "AT+CSTT=\"CMNET\"\r",  //设置APN
+	"AT+CSTT=\"3GWAP\"\r",  //设置APN
+        //"AT+CSTT=\"CMNET\"\r",  //设置APN
 	"AT+CIICR\r",   //建立PPP连接
 	"AT+CIFSR\r",    //获取本地IP地址
 	"AT+CIPSTART=0,\"TCP\",",   //+ip+port 建立TCP连接
@@ -92,10 +92,6 @@ ErrorStatus ate_(void){
     OSMemPut(&MEM_Buf,buf_server_,&err);
   }
   return ERROR;
-}
-
-ErrorStatus at(void){
-  
 }
 
 
@@ -184,7 +180,6 @@ ErrorStatus at_csq(void){
   }
   return ERROR;
 }
-
 
 ErrorStatus at_creg(void){
   uint8_t i;
@@ -397,6 +392,10 @@ ErrorStatus send_server(uint8_t * send,uint16_t count){
   uint8_t sendcount[5];
   
   OSMutexPend(&MUTEX_SENDSERVER,1000,OS_OPT_PEND_BLOCKING,&ts,&err);
+  
+  if(err != OS_ERR_NONE){
+    return ERROR;
+  }
   
   //send the data
   sprintf(sendcount,"%d",count);

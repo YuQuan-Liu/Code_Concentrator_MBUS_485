@@ -36,7 +36,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
 void meter_clean(void); //执行一次开关阀操作
 
 void device_ack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485
-void device_nack(uint8_t desc,uint8_t server_seq_);  //发送确认帧  1 发送给M590E服务器  0 发送给485
 
 /*
 如果底层有采集器  底层采集器使用透传模式

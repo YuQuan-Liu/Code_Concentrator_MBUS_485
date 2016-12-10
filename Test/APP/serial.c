@@ -66,6 +66,10 @@ void USART3_Handler(void){
               1,
               OS_OPT_POST_FIFO,
               &err);
+      if(err != OS_ERR_NONE){
+        //没有放进队列  放回MEMPool
+        OSMemPut(&MEM_ISR,mem_ptr,&err);
+      }
     }else{
       asm("NOP");
     }
@@ -94,7 +98,7 @@ void USART2_Handler(void){
   uint8_t *mem_ptr;
   
   //receive the byte
-  if(USART_GetFlagStatus(USART2,USART_FLAG_RXNE)){
+  if(USART_GetFlagStatus(USART2,USART_FLAG_RXNE) && USART_GetITStatus(USART2,USART_IT_RXNE)){
     rx_byte = USART_ReceiveData(USART2);
     mem_ptr = OSMemGet(&MEM_ISR,&err);
     
@@ -105,6 +109,10 @@ void USART2_Handler(void){
               1,
               OS_OPT_POST_FIFO,
               &err);
+      if(err != OS_ERR_NONE){
+        //没有放进队列  放回MEMPool
+        OSMemPut(&MEM_ISR,mem_ptr,&err);
+      }
     }else{
       asm("NOP");
     }
@@ -134,7 +142,7 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
   /**/
   if(slave_mbus == 0xAA){
     USART_ITConfig(USART2,USART_IT_TC,ENABLE);
-    
+    USART_ITConfig(USART2,USART_IT_RXNE,DISABLE);
     for(i = 0;i < count;i++){
       err = OS_ERR_NONE;
       OSSemPend(&SEM_Slave_mbusTX,
@@ -149,7 +157,9 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
     
     USART_ITConfig(USART2,USART_IT_TC,DISABLE);
     while(USART_GetFlagStatus(USART2, USART_FLAG_TC) == RESET);
-    
+    USART_GetFlagStatus(USART2,USART_FLAG_RXNE);
+    USART_ReceiveData(USART2);
+    USART_ITConfig(USART2,USART_IT_RXNE,ENABLE);
   }else{
     //send to 485
     GPIO_SetBits(GPIOB,GPIO_Pin_2);
@@ -169,11 +179,7 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
     
     USART_ITConfig(USART3,USART_IT_TC,DISABLE);
     while(USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET);
-    /*
-    OSTimeDlyHMSM(0,0,0,50,
-                      OS_OPT_TIME_HMSM_STRICT,
-                      &err);
-    */
+    
     GPIO_ResetBits(GPIOB,GPIO_Pin_2);
   }
   return SUCCESS;
@@ -201,11 +207,7 @@ ErrorStatus Server_Write_485(uint8_t * data,uint16_t count){
   
   USART_ITConfig(USART3,USART_IT_TC,DISABLE);
   while(USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET);
-  /*
-  OSTimeDlyHMSM(0,0,0,50,
-                    OS_OPT_TIME_HMSM_STRICT,
-                    &err);
-  */
+  
   GPIO_ResetBits(GPIOB,GPIO_Pin_2);
   
   return SUCCESS;
@@ -219,7 +221,7 @@ ErrorStatus Server_Write(uint8_t * data,uint16_t count){
   USART_ITConfig(USART1,USART_IT_TC,ENABLE);
   for(i = 0;i < count;i++){
     OSSemPend(&SEM_ServerTX,
-              50,
+              100,
               OS_OPT_PEND_BLOCKING,
               &ts,
               &err);
@@ -243,7 +245,7 @@ ErrorStatus Server_WriteStr(uint8_t * data){
   USART_ClearITPendingBit(USART1,USART_IT_TC);
   while(*str != '\0'){
     OSSemPend(&SEM_ServerTX,
-              50,
+              100,
               OS_OPT_PEND_BLOCKING,
               &ts,
               &err);

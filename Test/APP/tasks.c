@@ -131,8 +131,18 @@ void Task_Slave(void *p_arg){
                         frame_len,
                         OS_OPT_POST_FIFO,
                         &err);
-                buf_ = 0;
-                buf = 0;
+                if(err == OS_ERR_NONE){
+                  buf_ = 0;
+                  buf = 0;
+                  start_slave = 0;
+                  frame_len = 0;
+                }else{
+                  buf = buf_;
+                  start_slave = 0;
+                  frame_len = 0;
+                }
+              }else{
+                buf = buf_;
                 start_slave = 0;
                 frame_len = 0;
               }
@@ -165,10 +175,16 @@ void Task_Slave(void *p_arg){
                         frame_len,
                         OS_OPT_POST_FIFO,
                         &err);
-                buf_ = 0;
-                buf = 0;
-                start_slave = 0;
-                frame_len = 0;
+                if(err == OS_ERR_NONE){
+                  buf_ = 0;
+                  buf = 0;
+                  start_slave = 0;
+                  frame_len = 0;
+                }else{
+                  buf = buf_;
+                  start_slave = 0;
+                  frame_len = 0;
+                }
               }else{
                 buf = buf_;
                 start_slave = 0;
@@ -187,10 +203,16 @@ void Task_Slave(void *p_arg){
                           frame_len,
                           OS_OPT_POST_FIFO,
                           &err);
-                  buf_ = 0;
-                  buf = 0;
-                  start_slave = 0;
-                  frame_len = 0;
+                  if(err == OS_ERR_NONE){
+                    buf_ = 0;
+                    buf = 0;
+                    start_slave = 0;
+                    frame_len = 0;
+                  }else{
+                    buf = buf_;
+                    start_slave = 0;
+                    frame_len = 0;
+                  }
                 }else{
                   buf = buf_;
                   start_slave = 0;
@@ -268,12 +290,20 @@ void Task_Slave(void *p_arg){
                             &err);
                     break;
                 }
-                buf_ = 0;
-                buf = 0;
-                start_slave = 0;
-                frame_len = 0;
-                header_count = 0;
-                header_ok = 0;
+                if(err == OS_ERR_NONE){
+                  buf_ = 0;
+                  buf = 0;
+                  start_slave = 0;
+                  frame_len = 0;
+                  header_count = 0;
+                  header_ok = 0;
+                }else{
+                  buf = buf_;
+                  start_slave = 0;
+                  frame_len = 0;
+                  header_count = 0;
+                  header_ok = 0;
+                }
               }else{
                 buf = buf_;
                 start_slave = 0;
@@ -324,6 +354,7 @@ void Task_Server(void *p_arg){
   
   uint8_t * buf_server_task = 0;
   uint8_t * buf_server_task_ = 0;
+  uint8_t getbuffail = 0;
   
   while(DEF_TRUE){
     if(connectstate == 1){
@@ -333,12 +364,17 @@ void Task_Server(void *p_arg){
         
         if(err == OS_ERR_NONE){
           //get the buf
+          getbuffail = 0;
           buf_server_task_ = buf_server_task;
           Mem_Set(buf_server_task_,0x00,256); //clear the buf
           Server_Post2Buf(buf_server_task_);
         }else{
           //didn't get the buf
-          asm("NOP");
+          getbuffail ++;
+          if(getbuffail >= 20){
+            //20次没有获取到buf  
+            *((uint8_t *)0) = 0x00;  //迫使系统重启
+          }
           continue;
         }
       }
@@ -377,9 +413,8 @@ void Task_Server(void *p_arg){
         //CLOSED
         if(Str_Str(buf_server_task_,"CLOSE")){
           
-          buf_server_task = buf_server_task_;
           Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          
+          OSMemPut(&MEM_Buf,buf_server_task_,&err);
           buf_server_task = 0;
           buf_server_task_ = 0;
           Server_Post2Buf(0);
@@ -389,9 +424,8 @@ void Task_Server(void *p_arg){
         //+PDP: DEACT\r\n
         if(Str_Str(buf_server_task_,"DEACT")){
           
-          buf_server_task = buf_server_task_;
           Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          
+          OSMemPut(&MEM_Buf,buf_server_task_,&err);
           buf_server_task = 0;
           buf_server_task_ = 0;
           Server_Post2Buf(0);
@@ -399,11 +433,10 @@ void Task_Server(void *p_arg){
           continue;
         }
         
-        if(Str_Str(buf_server_task_,"Error")){
+        if(Str_Str(buf_server_task_,"ERROR")){
           
-          buf_server_task = buf_server_task_;
           Mem_Set(buf_server_task_,0x00,256); //clear the buf
-          
+          OSMemPut(&MEM_Buf,buf_server_task_,&err);
           buf_server_task = 0;
           buf_server_task_ = 0;
           Server_Post2Buf(0);
@@ -492,9 +525,6 @@ void Task_DealServer(void *p_arg){
             }
           }
           break;
-        case AFN_LINK_TEST:
-          //never will come to here
-          break;
         case AFN_CONFIG:
         case AFN_QUERY:
           buf_copy = OSMemGet(&MEM_Buf,&err);
@@ -502,6 +532,9 @@ void Task_DealServer(void *p_arg){
             Mem_Copy(buf_copy,start,len);
             *(buf_copy + len) = 0x01;  //标识这一帧来自服务器
             OSQPost(&Q_Config,buf_copy,len,OS_OPT_POST_1,&err);
+            if(err != OS_ERR_NONE){
+              OSMemPut(&MEM_Buf,buf_copy,&err);
+            }
           }
           break;
         case AFN_CONTROL:
@@ -519,16 +552,22 @@ void Task_DealServer(void *p_arg){
               if(buf_copy != 0){
                 Mem_Copy(buf_copy,start,len);
                 *(buf_copy + len) = 0x01;  //标识这一帧来自服务器
+                server_seq = server_seq_;
+                device_ack(0x01,server_seq_);
+                OSQPost(&Q_Read,buf_copy,len,OS_OPT_POST_1,&err);
+                if(err != OS_ERR_NONE){
+                  OSMemPut(&MEM_Buf,buf_copy,&err);
+                }
               }
-              server_seq = server_seq_;
-              device_ack(0x01,server_seq_);
-              OSQPost(&Q_Read,buf_copy,len,OS_OPT_POST_1,&err);
             }else{
               device_ack(0x01,server_seq_);
             }
           }
           
           
+          break;
+        case AFN_LINK_TEST:
+          //never will come to here
           break;
         case AFN_HISTORY:
           //don't support
@@ -988,10 +1027,6 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       Slave_Write(buf_frame_,13+3);
       buf_readdata = OSQPend(&Q_ReadData,1200,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
-        if(i==2){
-          //读表失败  存flash  
-          success = 0;
-        }
         continue;
       }
       //接收到正确的数据
@@ -1466,10 +1501,6 @@ uint8_t cjq_open(uint8_t * cjq_addr,uint32_t block_cjq){
         Slave_Write(buf_frame_,13+4);
         buf_readdata = OSQPend(&Q_ReadData,5000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
         if(err != OS_ERR_NONE){
-          if(i==1){
-            //开采集器失败  存flash  return nack
-            success = 0;
-          }
           continue;
         }
         //接收到正确的数据
@@ -1554,10 +1585,6 @@ uint8_t cjq_close(uint8_t * cjq_addr,uint32_t block_cjq){
         Slave_Write(buf_frame_,13+4);
         buf_readdata = OSQPend(&Q_ReadData,4000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
         if(err != OS_ERR_NONE){
-          if(i==1){
-            //关采集器失败  存flash  return nack
-            success = 0;
-          }
           continue;
         }
         //接收到正确的数据
@@ -1635,10 +1662,6 @@ void meter_open(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,uin
       Slave_Write(buf_frame_,13+4);
       buf_readdata = OSQPend(&Q_ReadData,15000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
-        if(i==1){
-          //开阀失败  存flash  return nack
-          success = 0;
-        }
         continue;
       }
       //接收到正确的数据
@@ -1748,10 +1771,6 @@ void meter_close(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_type,ui
       Slave_Write(buf_frame_,13+4);
       buf_readdata = OSQPend(&Q_ReadData,15000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
-        if(i==1){
-          //开阀失败  存flash  return nack
-          success = 0;
-        }
         continue;
       }
       //接收到正确的数据
@@ -2735,43 +2754,6 @@ void device_ack(uint8_t desc,uint8_t server_seq_){
   
 }
 
-void device_nack(uint8_t desc,uint8_t server_seq_){
-  uint8_t nack[17];
-  uint8_t * buf_frame;
-  
-  buf_frame = nack;
-  *buf_frame++ = FRAME_HEAD;
-  *buf_frame++ = 0x27;//(9 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  *buf_frame++ = 0x27;//(9 << 2) | 0x03;
-  *buf_frame++ = 0x00;
-  *buf_frame++ = FRAME_HEAD;
-  
-  *buf_frame++ = ZERO_BYTE | DIR_TO_SERVER | PRM_SLAVE | SLAVE_FUN_ACK;
-  /**/
-  *buf_frame++ = deviceaddr[0];
-  *buf_frame++ = deviceaddr[1];
-  *buf_frame++ = deviceaddr[2];
-  *buf_frame++ = deviceaddr[3];
-  *buf_frame++ = deviceaddr[4];
-  
-  *buf_frame++ = AFN_ACK;
-  *buf_frame++ = ZERO_BYTE |SINGLE | server_seq_;
-  *buf_frame++ = FN_NACK;
-  
-  *buf_frame++ = check_cs(nack+6,9);
-  *buf_frame++ = FRAME_END;
-  
-  if(desc){
-    //to m590e
-    send_server(nack,17);
-  }else{
-    //to 485
-    Server_Write_485(nack,17);
-  }
-  
-}
-
 void ack_query_cjq(uint8_t desc,uint8_t server_seq_){
   OS_ERR err;
   uint8_t * buf_frame;
@@ -3391,11 +3373,17 @@ void Task_OverLoad(void *p_arg){
     OSTimeDly(500,
                   OS_OPT_TIME_DLY,
                   &err);
-    if(!GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_13)){
+    if(GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_13)){
       //enable the beep
       GPIO_SetBits(GPIOC,GPIO_Pin_14);
       //disable the mbus power
-      GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+      //GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+      //关闭采集器
+      relay_1(DISABLE);
+      relay_2(DISABLE);
+      relay_3(DISABLE);
+      relay_4(DISABLE);
+      cjq_isopen = 0;
       //Light the LED3
       //蜂鸣器响20s
       while(cnt < 100){
