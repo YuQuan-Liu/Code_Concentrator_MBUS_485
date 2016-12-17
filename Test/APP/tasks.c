@@ -355,6 +355,7 @@ void Task_Server(void *p_arg){
   uint8_t * buf_server_task = 0;
   uint8_t * buf_server_task_ = 0;
   uint8_t getbuffail = 0;
+  uint8_t connectfail = 0;
   
   while(DEF_TRUE){
     if(connectstate == 1){
@@ -373,6 +374,7 @@ void Task_Server(void *p_arg){
           getbuffail ++;
           if(getbuffail >= 20){
             //20次没有获取到buf  
+            Device_Cmd(DISABLE);
             *((uint8_t *)0) = 0x00;  //迫使系统重启
           }
           continue;
@@ -468,7 +470,15 @@ void Task_Server(void *p_arg){
       
       Device_Cmd(DISABLE);
       Device_Cmd(ENABLE);
-      connect();
+      if(connect() == SUCCESS){
+        connectfail = 0;
+      }else{
+        connectfail++;
+        if(connectfail > 20){
+          Device_Cmd(DISABLE);
+          *((uint8_t *)0) = 0x00;  //迫使系统重启
+        }
+      }
     }
   }
   
@@ -2252,12 +2262,14 @@ void param_config(uint8_t * buf_frame,uint8_t desc){
       OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
       
       device_ack(desc,server_seq_);
+      Device_Cmd(DISABLE);
       *((uint8_t *)0) = 0x00;  //迫使系统重启
     }
     break;
   case FN_RESET:
     if(*(buf_frame + DATA_POSITION) == 0xFF){
       device_ack(desc,server_seq_);
+      Device_Cmd(DISABLE);
       *((uint8_t *)0) = 0x00;  //迫使系统重启
     }
     break;

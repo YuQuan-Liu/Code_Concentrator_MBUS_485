@@ -39,8 +39,8 @@ u8 *ats[20]={
 	"AT+CREG?\r",  //检查网络注册状态
 	"AT+CGATT?\r",  //检查GPRS附着状态
 	"AT+CIPMUX=1\r",  //设置成多链路模式
-	"AT+CSTT=\"3GWAP\"\r",  //设置APN
-        //"AT+CSTT=\"CMNET\"\r",  //设置APN
+	//"AT+CSTT=\"3GWAP\"\r",  //设置APN
+        "AT+CSTT=\"CMNET\"\r",  //设置APN
 	"AT+CIICR\r",   //建立PPP连接
 	"AT+CIFSR\r",    //获取本地IP地址
 	"AT+CIPSTART=0,\"TCP\",",   //+ip+port 建立TCP连接
@@ -412,6 +412,7 @@ ErrorStatus send_server(uint8_t * send,uint16_t count){
   
   
   if(err != OS_ERR_NONE){
+    OSMutexPost(&MUTEX_SENDSERVER,OS_OPT_POST_NONE,&err);
     return ERROR;
   }
   
