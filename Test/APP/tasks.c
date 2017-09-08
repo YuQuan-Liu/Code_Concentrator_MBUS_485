@@ -905,6 +905,9 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
     readingall = 1;
     /**/
     for(i = 0;i < cjq_count;i++){
+      OSTimeDly(500,
+                OS_OPT_TIME_DLY,
+                &err);
       sFLASH_ReadBuffer((uint8_t *)&cjq_addr,block_cjq+6,6);
       sFLASH_ReadBuffer((uint8_t *)&block_meter,block_cjq+12,3);
       sFLASH_ReadBuffer((uint8_t *)&cjqmeter_count,block_cjq+18,2);
