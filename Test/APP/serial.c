@@ -91,7 +91,7 @@ void USART3_Handler(void){
 }
 
 extern OS_SEM SEM_Slave_mbusTX;
-//mbus
+//mbus   RF
 void USART2_Handler(void){
   OS_ERR err;
   uint8_t rx_byte;
@@ -138,9 +138,9 @@ ErrorStatus Slave_Write(uint8_t * data,uint16_t count){
   CPU_TS ts;
   OS_ERR err;
   
-  //send to mbus
+  //send to mbus    RF 
   /**/
-  if(slave_mbus == 0xAA){
+  if(slave_mbus != 0xFF){
     USART_ITConfig(USART2,USART_IT_TC,ENABLE);
     USART_ITConfig(USART2,USART_IT_RXNE,DISABLE);
     for(i = 0;i < count;i++){
