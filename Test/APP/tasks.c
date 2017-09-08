@@ -118,7 +118,11 @@ void Task_Slave(void *p_arg){
         }else{
           *buf++ = data;
           if((buf-buf_) == 11){
-            frame_len = *(buf_+10)+13;
+            if(*(buf_+10) == 0x16){
+              frame_len = *(buf_+10)+13-2;
+            }else{
+              frame_len = *(buf_+10)+13;
+            }
           }
           if(frame_len > 0 && (buf-buf_) >= frame_len){
             //if it is the end of the frame
@@ -1047,8 +1051,8 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
         success = 1;
         //ªÒ»°ST
-        st_l = *(buf_readdata + 31);
-        st_h = *(buf_readdata + 32);
+        st_l = 0x00;
+        st_h = 0x00;
         for(j = 0;j < 4;j++){
           read[j] = *(buf_readdata + 14 + j);
           half[j] = *(buf_readdata + 19 + j);
