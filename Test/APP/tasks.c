@@ -117,8 +117,8 @@ void Task_Slave(void *p_arg){
           }
         }else{
           *buf++ = data;
-          if((buf-buf_) == 11){
-            frame_len = *(buf_+10)+13;
+          if((buf-buf_) == 12){
+            frame_len = *(buf_+11)+14;
           }
           if(frame_len > 0 && (buf-buf_) >= frame_len){
             //if it is the end of the frame
@@ -997,7 +997,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     OS_ERR err;
     CPU_TS ts;
     uint8_t buf_frame_[16];
-    uint8_t read[4];
+    uint8_t read[10];
     uint8_t half[4];
     uint8_t i = 0;
     uint8_t j = 0;
@@ -1007,15 +1007,20 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     uint8_t st_l = 0;
     uint8_t st_h = 0;
     uint8_t * buf_frame = 0;
+    uint8_t meter_addr_cs = 0;
+    uint32_t * p_meter_read = 0;
     
     buf_frame = buf_frame_;
     *buf_frame++ = FRAME_HEAD;
     *buf_frame++ = meter_type;
-    for(i=0;i<7;i++){
+    for(i=0;i<6;i++){
       *buf_frame++ = *(meter_addr + i);
+      meter_addr_cs = meter_addr_cs + *(meter_addr + i);
     }
+    *buf_frame++ = meter_addr_cs;
+    *buf_frame++ = 0x00;
     *buf_frame++ = 0x01; //C
-    *buf_frame++ = 0x03; //len
+    *buf_frame++ = 0x02; //len
     if(di_seq == 0xFF){
       //默认低位在前
       *buf_frame++ = DATAFLAG_RD_L;
@@ -1026,7 +1031,6 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       *buf_frame++ = DATAFLAG_RD_L;
     }
     
-    *buf_frame++ = 0x01;
     *buf_frame++ = check_cs(buf_frame_,11+3);
     *buf_frame++ = FRAME_END;
     
@@ -1044,15 +1048,23 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       }
       //接收到正确的数据
       //判断表地址
-      if(Mem_Cmp(meter_addr,buf_readdata+2,7) == DEF_YES){
+      if(Mem_Cmp(meter_addr,buf_readdata+2,6) == DEF_YES){
         success = 1;
         //获取ST
         st_l = *(buf_readdata + 31);
         st_h = *(buf_readdata + 32);
-        for(j = 0;j < 4;j++){
-          read[j] = *(buf_readdata + 14 + j);
-          half[j] = *(buf_readdata + 19 + j);
-        }
+        
+        p_meter_read = (uint32_t *)(buf_readdata + 14);
+        sprintf(read,"%06d",*p_meter_read);
+        
+        half[3] = 0x00;
+        half[2] = (read[0]<<4) + (read[1]&0x0F);
+        half[1] = (read[2]<<4) + (read[3]&0x0F);
+        half[0] = (read[4]<<4) + (read[5]&0x0F);
+        read[3] = half[3];
+        read[2] = half[2];
+        read[1] = half[1];
+        read[0] = half[0];
       }
       
       OSMemPut(&MEM_Buf,buf_readdata,&err);
