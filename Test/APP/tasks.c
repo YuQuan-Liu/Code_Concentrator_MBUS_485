@@ -918,6 +918,9 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
           return;
         }
         for(j=0;j < cjqmeter_count;j++){
+          OSTimeDly(200,
+                    OS_OPT_TIME_DLY,
+                    &err);
           sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //¶ÁÈ¡ËùÔÚSector
           *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
           
