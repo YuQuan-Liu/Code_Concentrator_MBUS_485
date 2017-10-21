@@ -918,7 +918,7 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
           return;
         }
         for(j=0;j < cjqmeter_count;j++){
-          OSTimeDly(200,
+          OSTimeDly(500,
                     OS_OPT_TIME_DLY,
                     &err);
           sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //¶ÁÈ¡ËùÔÚSector
@@ -1038,10 +1038,10 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
       half[i] = 0x00;
     }
     
-    for(i = 0;success == 0 && i < 1;i++){
+    for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+3);
-      buf_readdata = OSQPend(&Q_ReadData,1200,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+      buf_readdata = OSQPend(&Q_ReadData,1300,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
         continue;
       }
