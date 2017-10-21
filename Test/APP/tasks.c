@@ -915,6 +915,7 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
         if(err != OS_ERR_NONE){
           //获取MUTEX过程中 出错了...
           //return 0xFFFFFF;
+          Device_Read(DISABLE);
           return;
         }
         for(j=0;j < cjqmeter_count;j++){
@@ -967,6 +968,7 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
             if(err != OS_ERR_NONE){
               //获取MUTEX过程中 出错了...
               //return 0xFFFFFF;
+              Device_Read(DISABLE);
               return;
             }
             sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
@@ -1417,6 +1419,7 @@ void meter_control(uint8_t * buf_frame,uint8_t desc){
               if(err != OS_ERR_NONE){
                 //获取MUTEX过程中 出错了...
                 //return 0xFFFFFF;
+                Device_Read(DISABLE);
                 return;
               }
               sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //读取所在Sector
