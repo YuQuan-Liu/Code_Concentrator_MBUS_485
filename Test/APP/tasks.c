@@ -1043,7 +1043,7 @@ void meter_read_single(uint8_t * meter_addr,uint32_t block_meter,uint8_t meter_t
     for(i = 0;success == 0 && i < 3;i++){
       Slave_Write(fe,4);
       Slave_Write(buf_frame_,13+3);
-      buf_readdata = OSQPend(&Q_ReadData,1300,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
+      buf_readdata = OSQPend(&Q_ReadData,2000,OS_OPT_PEND_BLOCKING,&msg_size,&ts,&err);
       if(err != OS_ERR_NONE){
         continue;
       }
