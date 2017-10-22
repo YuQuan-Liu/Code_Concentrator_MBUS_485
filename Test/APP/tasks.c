@@ -919,9 +919,6 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
           return;
         }
         for(j=0;j < cjqmeter_count;j++){
-          OSTimeDly(500,
-                    OS_OPT_TIME_DLY,
-                    &err);
           sFLASH_ReadBuffer(config_flash,(block_meter/0x1000)*0x1000,sFLASH_SECTOR_SIZE);  //¶ÁÈ¡ËùÔÚSector
           *(config_flash+block_meter%0x1000 + 22) = (*(config_flash+block_meter%0x1000 + 22)) | 0x80;
           
@@ -934,7 +931,13 @@ void meter_read_188(uint8_t * buf_frame,uint8_t desc){
         
         OSMutexPost(&MUTEX_CONFIGFLASH,OS_OPT_POST_NONE,&err);
       }else{
+        OSTimeDly(5000,
+                  OS_OPT_TIME_DLY,
+                  &err);
         for(j=0;j < cjqmeter_count;j++){
+          OSTimeDly(500,
+                    OS_OPT_TIME_DLY,
+                    &err);
           sFLASH_ReadBuffer((uint8_t *)&meter_addr,block_meter+6,7);
           sFLASH_ReadBuffer((uint8_t *)&meter_type,block_meter+13,1);
           
